@@ -20,6 +20,7 @@ MarkdownComments is a project for adding collaborative commenting features to Ma
 | `docs\product-brief.md` | Product goals, users, workflows, and open questions. |
 | `docs\architecture.md` | Initial architecture notes and technical direction. |
 | `docs\format.md` | Approved inline `MarkdownComments` fenced-block format. |
+| `docs\implementation-plan.md` | First-release implementation plan and task breakdown. |
 | `docs\squad.md` | Human-readable squad roster and collaboration model. |
 | `squad\agents.yml` | Machine-readable squad definition. |
 
