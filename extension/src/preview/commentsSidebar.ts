@@ -70,7 +70,11 @@ export class CommentsSidebarProvider implements vscode.WebviewViewProvider {
         // Only navigate when the click came from the document the sidebar is
         // currently showing; a stale click from a previous target is ignored.
         if (this.targetUri && reveal.uri === this.targetUri.toString()) {
-          void revealThread(this.targetUri, reveal.threadId);
+          // Prefer focusing the comment inside the interactive preview panel
+          // when it is open for this document; otherwise reveal the source line.
+          if (!CommentsPreviewPanel.revealThread(this.targetUri, reveal.threadId)) {
+            void revealThread(this.targetUri, reveal.threadId);
+          }
         }
         return;
       }

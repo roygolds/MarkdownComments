@@ -25,8 +25,10 @@ diff cleanly in Git.
   comment threads for the active Markdown file — Word-style side comments — with
   the same reply/edit/resolve/reopen/delete actions. It follows whichever
   Markdown file you focus (including the interactive Comments Preview panel) and
-  updates live as you edit. Click a comment to jump to its anchored line in the
-  document. While the sidebar is open, the built-in Markdown preview hides its
+  updates live as you edit. Click a comment to jump to it: if the interactive
+  Comments Preview panel is open for that file, the panel scrolls to the thread
+  and briefly highlights it; otherwise the source Markdown opens at the anchored
+  line. While the sidebar is open, the built-in Markdown preview hides its
   inline comment cards so comments appear in just one place.
 - **Hide & collapse controls**: hide all comments, collapse comment bodies, hide
   resolved threads, or collapse individual threads — in the panel, the sidebar,

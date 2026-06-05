@@ -18,9 +18,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the comment threads for the active Markdown file — Word-style side comments —
   with the same reply/edit/resolve/reopen/delete actions. It follows the active
   Markdown editor (and the interactive Comments Preview panel) and updates live
-  as the document changes. Clicking a comment reveals its anchored line in the
-  document, and while the sidebar is open the built-in Markdown preview hides its
-  inline comment cards to avoid showing comments twice.
+  as the document changes. Clicking a comment focuses it: when the interactive
+  Comments Preview panel is open for that file, the panel is brought forward,
+  scrolled to the thread, and the thread is briefly highlighted; otherwise the
+  source Markdown is revealed at the anchored line. While the sidebar is open the
+  built-in Markdown preview hides its inline comment cards to avoid showing
+  comments twice.
 - Hide and collapse controls for comments in the panel, the sidebar, and
   VS Code's built-in Markdown preview: hide all comments, collapse all comment
   bodies, hide resolved threads, and collapse individual threads.

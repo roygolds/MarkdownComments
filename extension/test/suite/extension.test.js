@@ -619,6 +619,28 @@ describe("MarkdownComments extension", () => {
       api.setSidebarVisible(false);
     }
   });
+
+  it("routes a sidebar reveal to the open preview panel and reports a miss otherwise", async () => {
+    const ext = vscode.extensions.getExtension(EXT_ID);
+    const api = await ext.activate();
+    const doc = await openMarkdown("sample.md");
+    await vscode.commands.executeCommand("markdownComments.openPreview");
+    let routed = false;
+    for (let i = 0; i < 25; i++) {
+      if (api.revealThreadInPanel(doc.uri, "mc-001")) {
+        routed = true;
+        break;
+      }
+      await wait(150);
+    }
+    assert.ok(routed, "reveal routed to the open preview panel for the document");
+    const other = vscode.Uri.file("/no/such/document.md");
+    assert.strictEqual(
+      api.revealThreadInPanel(other, "mc-001"),
+      false,
+      "reveal reports a miss when no panel shows that document"
+    );
+  });
 });
 
 // Apply a core EditResult's text edits to a string (offsets from LSP positions,

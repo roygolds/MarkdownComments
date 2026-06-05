@@ -150,6 +150,20 @@ body.mdc-sidebar {
   display: none;
 }
 
+/* Brief highlight when a comment is revealed from the sidebar. */
+.mdc-thread--flash {
+  animation: mdc-thread-flash 1.2s ease-out;
+}
+
+@keyframes mdc-thread-flash {
+  0% {
+    background-color: var(--vscode-editor-findMatchHighlightBackground, rgba(234, 92, 0, 0.33));
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
 .mdc-quote {
   font-style: italic;
   color: var(--vscode-descriptionForeground);

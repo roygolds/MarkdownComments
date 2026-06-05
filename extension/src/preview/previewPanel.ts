@@ -42,6 +42,23 @@ export class CommentsPreviewPanel {
     return c && c.active ? c.uri : undefined;
   }
 
+  /**
+   * If the interactive preview panel is open for `uri`, bring it forward and
+   * scroll it to the given thread, then return true. Returns false when no panel
+   * is showing that document, so callers can fall back to revealing the source
+   * text editor. Lets a sidebar click focus the comment in the preview rather
+   * than switching the user to the raw Markdown.
+   */
+  static revealThread(uri: vscode.Uri, threadId: string): boolean {
+    const c = CommentsPreviewPanel.current;
+    if (!c || c.uri.toString() !== uri.toString()) {
+      return false;
+    }
+    c.panel.reveal(c.panel.viewColumn, true);
+    void c.panel.webview.postMessage({ type: "revealThread", threadId });
+    return true;
+  }
+
   static createOrShow(extensionUri: vscode.Uri, document: vscode.TextDocument): void {
     const column = vscode.ViewColumn.Beside;
     const existing = CommentsPreviewPanel.current;

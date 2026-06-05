@@ -5,8 +5,7 @@ import * as vscode from "vscode";
 import { CommentManager, MarkdownComment } from "./comments/commentController";
 import { extendMarkdownIt, applyMarkdownCommentsPlugin } from "./preview/markdownItPlugin";
 import { CommentsPreviewPanel } from "./preview/previewPanel";
-import { CommentsSidebarProvider } from "./preview/commentsSidebar";
-import { renderDocumentComments, selectSidebarBody } from "./preview/documentCards";
+import { CommentsSidebarProvider } from "./preview/commentsSidebar";import { renderDocumentComments, selectSidebarBody } from "./preview/documentCards";
 import {
   validateInboundMessage,
   evaluateLiveGuard,
@@ -28,6 +27,7 @@ export function activate(context: vscode.ExtensionContext): {
   parseRevealMessage: typeof parseRevealMessage;
   isSidebarVisible: typeof isSidebarVisible;
   setSidebarVisible: typeof setSidebarVisible;
+  revealThreadInPanel: (uri: vscode.Uri, threadId: string) => boolean;
 } {
   const manager = new CommentManager();
   context.subscriptions.push(manager);
@@ -85,7 +85,8 @@ export function activate(context: vscode.ExtensionContext): {
     findThreadRange,
     parseRevealMessage,
     isSidebarVisible,
-    setSidebarVisible
+    setSidebarVisible,
+    revealThreadInPanel: (uri, threadId) => CommentsPreviewPanel.revealThread(uri, threadId)
   };
 }
 

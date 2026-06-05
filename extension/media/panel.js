@@ -325,6 +325,25 @@
     saveState();
   });
 
+  // Inbound host messages. The sidebar asks the panel to bring a comment into
+  // view (Word-style: clicking a side comment focuses it in the preview).
+  window.addEventListener("message", (event) => {
+    const msg = event.data;
+    if (!msg || msg.type !== "revealThread" || typeof msg.threadId !== "string") {
+      return;
+    }
+    const el = document.querySelector(
+      '.mdc-thread[data-thread-id="' + cssEscape(msg.threadId) + '"]'
+    );
+    if (!el) {
+      return;
+    }
+    el.classList.remove("mdc-thread--collapsed");
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    el.classList.add("mdc-thread--flash");
+    setTimeout(() => el.classList.remove("mdc-thread--flash"), 1200);
+  });
+
   function cssEscape(value) {
     if (window.CSS && typeof window.CSS.escape === "function") {
       return window.CSS.escape(value);
