@@ -202,7 +202,7 @@
     "pretest:integration": "npm run build",
     "test:integration": "node test/runTest.js",
     "test": "npm run test:unit",
-    "package": "vsce package --no-dependencies"
+    "package": "npx --yes @vscode/vsce package --no-dependencies"
   },
   "devDependencies": {
     "@types/markdown-it": "^14.1.1",
