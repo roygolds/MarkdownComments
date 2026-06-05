@@ -16,6 +16,7 @@ MarkdownComments is a project for adding collaborative commenting features to Ma
 | --- | --- |
 | `AGENTS.md` | Operating instructions for AI coding agents. |
 | `.github\copilot-instructions.md` | Copilot-specific repository guidance. |
+| `.github\agents\` | Per-agent role definitions for the squad. |
 | `docs\product-brief.md` | Product goals, users, workflows, and open questions. |
 | `docs\architecture.md` | Initial architecture notes and technical direction. |
 | `docs\format.md` | Approved inline `MarkdownComments` fenced-block format. |
