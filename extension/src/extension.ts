@@ -11,7 +11,7 @@ import {
   evaluateLiveGuard,
   computeEdit
 } from "./preview/messageValidation";
-import { findThreadRange, parseRevealMessage } from "./preview/revealThread";
+import { findThreadRange, parseRevealMessage, revealThread } from "./preview/revealThread";
 import { isSidebarVisible, setSidebarVisible } from "./preview/previewState";
 import { clearIdentityCache } from "./model/identity";
 
@@ -25,6 +25,7 @@ export function activate(context: vscode.ExtensionContext): {
   selectSidebarBody: typeof selectSidebarBody;
   findThreadRange: typeof findThreadRange;
   parseRevealMessage: typeof parseRevealMessage;
+  revealThread: typeof revealThread;
   isSidebarVisible: typeof isSidebarVisible;
   setSidebarVisible: typeof setSidebarVisible;
   revealThreadInPanel: (uri: vscode.Uri, threadId: string) => boolean;
@@ -84,6 +85,7 @@ export function activate(context: vscode.ExtensionContext): {
     selectSidebarBody,
     findThreadRange,
     parseRevealMessage,
+    revealThread,
     isSidebarVisible,
     setSidebarVisible,
     revealThreadInPanel: (uri, threadId) => CommentsPreviewPanel.revealThread(uri, threadId)

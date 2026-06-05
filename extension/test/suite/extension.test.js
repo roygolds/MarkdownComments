@@ -641,6 +641,50 @@ describe("MarkdownComments extension", () => {
       "reveal reports a miss when no panel shows that document"
     );
   });
+
+  it("revealThread scrolls the source editor to bring the anchored line into view", async () => {
+    const ext = vscode.extensions.getExtension(EXT_ID);
+    const api = await ext.activate();
+
+    // A long document so the anchored content sits well below the first
+    // viewport: revealing it must actually scroll the editor, which is exactly
+    // what drives the built-in preview's scroll-sync.
+    const filler = Array.from({ length: 200 }, (_, i) => `Filler line ${i + 1}.`).join("\n");
+    const fence =
+      "```MarkdownComments\n" +
+      "- id: mc-deep\n" +
+      '  quote: "anchor target phrase"\n' +
+      "  comments:\n" +
+      "    - by: Tester\n" +
+      '      at: "2026-06-05T08:03:51Z"\n' +
+      "      text: deep comment\n" +
+      "```\n";
+    const content = `${filler}\n${fence}This paragraph mentions the anchor target phrase here.\n`;
+
+    const doc = await vscode.workspace.openTextDocument({ content, language: "markdown" });
+    const editor = await vscode.window.showTextDocument(doc);
+
+    const targetLine = api.findThreadRange(doc.getText(), "mc-deep").start.line;
+    assert.ok(targetLine > 100, "the anchored line should be deep in the document");
+
+    // Park the editor at the very top so a no-op reveal would be detectable.
+    editor.revealRange(new vscode.Range(0, 0, 0, 0), vscode.TextEditorRevealType.AtTop);
+    await wait(150);
+
+    await api.revealThread(doc.uri, "mc-deep");
+
+    let visible = false;
+    for (let i = 0; i < 20; i++) {
+      visible = editor.visibleRanges.some(
+        (r) => r.start.line <= targetLine && targetLine <= r.end.line
+      );
+      if (visible) {
+        break;
+      }
+      await wait(150);
+    }
+    assert.ok(visible, "the anchored line should be scrolled into the editor's viewport");
+  });
 });
 
 // Apply a core EditResult's text edits to a string (offsets from LSP positions,

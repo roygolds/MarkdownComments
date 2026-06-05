@@ -37,6 +37,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `version:stamp:write`, and `version:reset`. A shared `F5` launch config
   (`Run MarkdownComments Extension`) rebuilds the bundle before launching.
 
+### Fixed
+
+- Clicking a sidebar comment now reliably scrolls VS Code's built-in Markdown
+  preview to the anchored line. The reveal waits for the editor's visible range
+  to actually change and nudges the editor when the target is already at the top,
+  guaranteeing the visible-range event the preview's scroll-sync depends on
+  fires. When only the preview is open (no visible source editor), the source is
+  opened beside it — the only way VS Code lets an extension drive the built-in
+  preview — without taking keyboard focus away from the comments.
+
 ### Security
 
 - The preview panel and sidebar render Markdown with `html:false` and a strict

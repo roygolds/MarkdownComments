@@ -87,23 +87,98 @@ function isBuiltInPreviewActive(): boolean {
   return false;
 }
 
+// How long to wait for the editor's visible range to actually change after a
+// reveal before assuming the reveal was a no-op (e.g. the target was already at
+// the top). Comfortably longer than VS Code's 50ms TopmostLineMonitor throttle.
+const REVEAL_EVENT_TIMEOUT_MS = 200;
+// Let a nudge reveal settle (and clear the throttle window) before the final
+// reveal, so the two scrolls are not coalesced into one by VS Code.
+const NUDGE_SETTLE_MS = 80;
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Resolve once the visible range of an editor for `uri` changes, or after
+ * `timeoutMs` with `false`. The built-in Markdown preview only scroll-syncs in
+ * response to `onDidChangeTextEditorVisibleRanges` (via its TopmostLineMonitor),
+ * so observing this event tells us whether a reveal actually moved the editor —
+ * and therefore whether the preview had anything to follow.
+ */
+function waitForVisibleRangeChange(uri: vscode.Uri, timeoutMs: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (changed: boolean) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      sub.dispose();
+      clearTimeout(timer);
+      resolve(changed);
+    };
+    const sub = vscode.window.onDidChangeTextEditorVisibleRanges((e) => {
+      if (e.textEditor.document.uri.toString() === uri.toString()) {
+        finish(true);
+      }
+    });
+    const timer = setTimeout(() => finish(false), timeoutMs);
+  });
+}
+
+/**
+ * Scroll `editor` to `vsRange` in a way that reliably drives VS Code's built-in
+ * Markdown preview. A single `revealRange` is a no-op when the target is already
+ * the top visible line, which emits no visible-range event and leaves the preview
+ * where it was. So we watch for the event and, if the first reveal moves nothing,
+ * nudge the editor to a far line and reveal again — guaranteeing a real scroll the
+ * preview's scroll-sync can follow.
+ */
+async function driveScrollSync(
+  editor: vscode.TextEditor,
+  vsRange: vscode.Range,
+  revealType: vscode.TextEditorRevealType
+): Promise<void> {
+  const uri = editor.document.uri;
+  let changed = waitForVisibleRangeChange(uri, REVEAL_EVENT_TIMEOUT_MS);
+  editor.revealRange(vsRange, revealType);
+  if (await changed) {
+    return;
+  }
+
+  const targetLine = vsRange.start.line;
+  const lastLine = Math.max(0, editor.document.lineCount - 1);
+  const nudgeLine = targetLine === 0 ? Math.min(lastLine, 1) : 0;
+  if (nudgeLine === targetLine) {
+    return;
+  }
+  editor.revealRange(
+    new vscode.Range(nudgeLine, 0, nudgeLine, 0),
+    vscode.TextEditorRevealType.AtTop
+  );
+  await delay(NUDGE_SETTLE_MS);
+  changed = waitForVisibleRangeChange(uri, REVEAL_EVENT_TIMEOUT_MS);
+  editor.revealRange(vsRange, revealType);
+  await changed;
+}
+
 /**
  * Reveal the thread's anchored line in the Markdown document. Behaviour depends
  * on what the user is looking at:
  *
- * - If a text editor for the document is already visible, scroll/select the line
- *   there without changing focus. When that editor is synced with VS Code's
- *   built-in Markdown preview (scroll-sync is on by default), the preview scrolls
- *   to the same line — so clicking a sidebar comment "focuses" the preview.
- * - Otherwise open the editor. When the built-in preview is the active tab we open
- *   beside it with focus preserved (so the preview stays put and scroll-syncs to
- *   the line); when the user is in the raw editor we focus it as before.
+ * - When VS Code's built-in Markdown preview is the active tab, keep keyboard
+ *   focus where it is (the sidebar) and drive the preview via editor->preview
+ *   scroll-sync: reuse a visible source editor if one exists, otherwise open one
+ *   beside the preview with focus preserved. The reveal is event-verified so it
+ *   still works when the target is already near the top (see driveScrollSync).
+ * - Otherwise (the user is in the raw editor) focus the editor and center the
+ *   line, as before.
  *
  * VS Code exposes no API to scroll the built-in preview directly, so this relies
- * on editor->preview scroll-sync; if the user disabled
- * `markdown.preview.scrollPreviewWithEditor` the preview will not follow.
- *
- * No-ops when the uri or thread id cannot be resolved.
+ * on editor->preview scroll-sync, which requires a visible source editor and
+ * `markdown.preview.scrollPreviewWithEditor` (on by default). No-ops when the uri
+ * or thread id cannot be resolved.
  */
 export async function revealThread(
   uri: vscode.Uri | undefined,
@@ -125,27 +200,28 @@ export async function revealThread(
   const vsRange = toVsRange(range);
   const selection = new vscode.Selection(vsRange.start, vsRange.start);
   const previewActive = isBuiltInPreviewActive();
-  // The built-in preview syncs to the editor's TOP visible line, so align the
-  // anchored line to the top when a preview is driving; otherwise center it.
-  const revealType = previewActive
-    ? vscode.TextEditorRevealType.AtTop
-    : vscode.TextEditorRevealType.InCenter;
 
-  const visible = vscode.window.visibleTextEditors.find(
+  let editor = vscode.window.visibleTextEditors.find(
     (e) => e.document.uri.toString() === uri.toString()
   );
-  if (visible) {
-    // Scroll/select in place; if a synced preview is showing, it follows along.
-    visible.selection = selection;
-    visible.revealRange(vsRange, revealType);
+  if (!editor) {
+    try {
+      editor = await vscode.window.showTextDocument(document, {
+        preview: false,
+        preserveFocus: previewActive,
+        viewColumn: previewActive ? vscode.ViewColumn.Beside : undefined
+      });
+    } catch {
+      return;
+    }
+  }
+  editor.selection = selection;
+
+  if (previewActive) {
+    // The built-in preview syncs to the editor's TOP visible line; align there
+    // and make sure the scroll actually happens so the preview follows.
+    await driveScrollSync(editor, vsRange, vscode.TextEditorRevealType.AtTop);
     return;
   }
-
-  const editor = await vscode.window.showTextDocument(document, {
-    preview: false,
-    preserveFocus: previewActive,
-    viewColumn: previewActive ? vscode.ViewColumn.Beside : undefined
-  });
-  editor.selection = selection;
-  editor.revealRange(vsRange, revealType);
+  editor.revealRange(vsRange, vscode.TextEditorRevealType.InCenter);
 }
