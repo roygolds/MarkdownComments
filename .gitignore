@@ -4,10 +4,15 @@ User Prompts and Scratchpad/
 # OS and editor files
 .DS_Store
 Thumbs.db
-.vscode/
+extension/.vscode/
 .idea/
 *.swp
 *.swo
+
+# Editor dirs are personal, but the extension run/build config is shared
+.vscode/*
+!.vscode/launch.json
+!.vscode/tasks.json
 
 # Environment and secrets
 .env

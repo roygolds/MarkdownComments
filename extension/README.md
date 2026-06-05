@@ -43,6 +43,33 @@ anchoring, validation, and deterministic edit synthesis. The extension supplies
 identity (Git `user.name`) and timestamps, applies the text edits the core
 returns, and renders the VS Code Comments UI.
 
+## Running the extension (development)
+
+Press <kbd>F5</kbd> in VS Code (open either the repository root or the `extension`
+folder). The bundled **Run MarkdownComments Extension** launch config runs a
+`build extension` task first, so the Extension Development Host always starts from
+a freshly built `dist/`. Then open a `.md` file in the new window.
+
+> [!IMPORTANT]
+> After changing extension code you must reload the running window for the change
+> to take effect: in the Extension Development Host run **Developer: Reload Window**
+> (<kbd>Ctrl</kbd>+<kbd>R</kbd>), or stop and press <kbd>F5</kbd> again. If you
+> instead installed a packaged `.vsix`, reinstall the new build — an old install
+> keeps running stale code. `dist/` is git-ignored, so a fresh clone has no build
+> until you run `npm run build` (F5 does this for you).
+
+### Built-in preview vs. Comments Preview panel
+
+Clicking a comment in the sidebar focuses it best in the **Comments Preview
+panel** (*MarkdownComments: Open Comments Preview*), which the extension fully
+controls — it scrolls to and highlights the thread. VS Code's **built-in**
+Markdown preview cannot be scrolled to a line by any extension API; the sidebar
+falls back to editor→preview scroll-sync, which only moves the built-in preview
+when a source editor for the file is visible and
+`markdown.preview.scrollPreviewWithEditor` is enabled (the default). With only
+the built-in preview open and no visible editor, the click opens the source
+editor beside the preview instead.
+
 ## Settings
 
 - `markdownComments.authorName`: display name for new comments (defaults to the
