@@ -24,6 +24,7 @@ export class CommentsSidebarProvider implements vscode.WebviewViewProvider {
   private viewListener: vscode.Disposable | undefined;
   private targetUri: vscode.Uri | undefined;
   private renderTimer: ReturnType<typeof setTimeout> | undefined;
+  private lastAppliedVisible: boolean | undefined;
   private readonly editController: CommentEditController;
   private readonly disposables: vscode.Disposable[] = [];
 
@@ -81,7 +82,7 @@ export class CommentsSidebarProvider implements vscode.WebviewViewProvider {
       void this.editController.handle(msg);
     });
 
-    setSidebarVisible(webviewView.visible);
+    this.applyVisibility(webviewView.visible);
     this.disposables.push(
       webviewView.onDidChangeVisibility(() => this.onVisibilityChanged(webviewView.visible))
     );
@@ -90,23 +91,32 @@ export class CommentsSidebarProvider implements vscode.WebviewViewProvider {
       this.viewListener?.dispose();
       this.viewListener = undefined;
       this.view = undefined;
-      setSidebarVisible(false);
-      void refreshBuiltInPreview();
+      this.applyVisibility(false);
     });
     // Adopt whatever Markdown document is active when the view opens.
     this.recomputeTarget();
     this.render();
-    void refreshBuiltInPreview();
   }
 
   private onVisibilityChanged(visible: boolean): void {
-    setSidebarVisible(visible);
     if (visible) {
       this.recomputeTarget();
       this.render();
     }
-    // Re-render the built-in preview so its inline comment cards appear/disappear
-    // in step with the sidebar.
+    this.applyVisibility(visible);
+  }
+
+  /**
+   * Record the sidebar's visibility and, only when it actually changed, re-render
+   * the built-in preview so its inline comment cards appear/disappear in step
+   * with the sidebar. The change guard avoids redundant global preview refreshes.
+   */
+  private applyVisibility(visible: boolean): void {
+    setSidebarVisible(visible);
+    if (this.lastAppliedVisible === visible) {
+      return;
+    }
+    this.lastAppliedVisible = visible;
     void refreshBuiltInPreview();
   }
 
@@ -217,23 +227,29 @@ ${bodyHtml}
   }
 }
 
-let reloadPluginsAvailable: boolean | undefined;
+let refreshCommand: string | undefined;
 
 /**
- * Best-effort re-render of VS Code's built-in Markdown preview so its inline
- * comment cards reflect the current sidebar visibility. `markdown.api.reloadPlugins`
- * re-runs contributed markdown-it plugins (including ours) and refreshes open
- * previews. If the command is unavailable the preview still updates on the next
- * document change, so failures are swallowed.
+ * Re-render VS Code's built-in Markdown preview so its inline comment cards
+ * reflect the current sidebar visibility. `markdown.preview.refresh` cleans the
+ * markdown engine cache and refreshes every open preview, which re-runs our
+ * fence renderer (and so re-reads the sidebar-visible flag). `markdown.api.reloadPlugins`
+ * only reloads plugin code and does NOT refresh already-open previews, so it is
+ * used only as a fallback. Failures are swallowed; the preview still updates on
+ * the next document change.
  */
 async function refreshBuiltInPreview(): Promise<void> {
   try {
-    if (reloadPluginsAvailable === undefined || reloadPluginsAvailable === false) {
+    if (refreshCommand === undefined) {
       const commands = await vscode.commands.getCommands(true);
-      reloadPluginsAvailable = commands.includes("markdown.api.reloadPlugins");
+      refreshCommand = commands.includes("markdown.preview.refresh")
+        ? "markdown.preview.refresh"
+        : commands.includes("markdown.api.reloadPlugins")
+          ? "markdown.api.reloadPlugins"
+          : "";
     }
-    if (reloadPluginsAvailable) {
-      await vscode.commands.executeCommand("markdown.api.reloadPlugins");
+    if (refreshCommand) {
+      await vscode.commands.executeCommand(refreshCommand);
     }
   } catch {
     /* best effort */
