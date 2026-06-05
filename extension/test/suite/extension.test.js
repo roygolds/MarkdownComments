@@ -58,18 +58,39 @@ describe("MarkdownComments extension", () => {
   it("renders a comment fence as HTML in the preview plugin", async () => {
     const ext = vscode.extensions.getExtension(EXT_ID);
     const api = await ext.activate();
-    let md;
-    try {
-      const MarkdownIt = require("markdown-it");
-      md = new MarkdownIt();
-    } catch {
-      return; // markdown-it isn't a runtime dependency; skip when unavailable.
-    }
+    // markdown-it is a devDependency, so this must resolve in CI; failing to
+    // load it should fail the test loudly rather than silently skip coverage.
+    const MarkdownIt = require("markdown-it");
+    const md = new MarkdownIt();
     api.extendMarkdownIt(md);
     const src =
       "```MarkdownComments\n- id: mc-001\n  comments:\n    - by: A\n      at: \"2026-06-05T08:03:51Z\"\n      text: hello preview\n```\nParagraph.\n";
     const html = md.render(src);
     assert.ok(html.includes("hello preview"), "preview should render comment text");
     assert.ok(html.includes("markdown-comments"), "preview should wrap comments in a container");
+  });
+
+  it("HTML-escapes hostile comment content in the preview plugin", async () => {
+    const ext = vscode.extensions.getExtension(EXT_ID);
+    const api = await ext.activate();
+    const MarkdownIt = require("markdown-it");
+    const md = new MarkdownIt();
+    api.extendMarkdownIt(md);
+    const src =
+      "```MarkdownComments\n" +
+      "- id: mc-001\n" +
+      '  quote: "\\"><img src=x onerror=alert(1)>"\n' +
+      "  comments:\n" +
+      "    - by: A\n" +
+      '      at: "2026-06-05T08:03:51Z"\n' +
+      '      text: "<script>alert(1)</script>"\n' +
+      "```\nParagraph.\n";
+    const html = md.render(src);
+    assert.ok(
+      html.includes("&lt;script&gt;alert(1)&lt;/script&gt;"),
+      "comment text must be HTML-escaped"
+    );
+    assert.ok(!html.includes("<script>alert(1)</script>"), "raw <script> must not appear");
+    assert.ok(!html.includes("<img src=x onerror"), "raw <img> from quote must not appear");
   });
 });

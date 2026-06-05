@@ -6,6 +6,15 @@
 
 use crate::model::Thread;
 
+/// Maximum fence-payload size accepted by the loader, in bytes.
+///
+/// Comment payloads are tiny in practice; this cap bounds the cost of parsing
+/// (which runs on every keystroke) and provides defense-in-depth against
+/// pathologically large or maliciously crafted YAML in a cloned repository.
+/// `serde_yaml`/libyaml already rejects alias/anchor "billion laughs" bombs via
+/// its own repetition limit; this cap additionally bounds large linear inputs.
+const MAX_PAYLOAD_BYTES: usize = 1 << 20; // 1 MiB
+
 /// Load the inner YAML payload of a fence into a list of threads.
 ///
 /// Returns the parsed threads, or an error message suitable for an
@@ -14,6 +23,13 @@ use crate::model::Thread;
 pub fn load(payload: &str) -> Result<Vec<Thread>, String> {
     if payload.trim().is_empty() {
         return Ok(Vec::new());
+    }
+    if payload.len() > MAX_PAYLOAD_BYTES {
+        return Err(format!(
+            "MarkdownComments payload is too large ({} bytes; limit {} bytes)",
+            payload.len(),
+            MAX_PAYLOAD_BYTES
+        ));
     }
     match serde_yaml::from_str::<Vec<Thread>>(payload) {
         Ok(threads) => Ok(threads),
@@ -54,5 +70,30 @@ mod tests {
     #[test]
     fn invalid_yaml_errors() {
         assert!(load("- id: [unclosed").is_err());
+    }
+
+    #[test]
+    fn alias_bomb_is_rejected_quickly() {
+        // A "billion laughs" alias bomb must be rejected (libyaml repetition
+        // limit), not expanded into gigabytes of memory.
+        let bomb = "a: &a [\"x\",\"x\",\"x\",\"x\",\"x\",\"x\",\"x\",\"x\",\"x\"]\n\
+b: &b [*a,*a,*a,*a,*a,*a,*a,*a,*a]\n\
+c: &c [*b,*b,*b,*b,*b,*b,*b,*b,*b]\n\
+d: &d [*c,*c,*c,*c,*c,*c,*c,*c,*c]\n\
+e: &e [*d,*d,*d,*d,*d,*d,*d,*d,*d]\n\
+f: &f [*e,*e,*e,*e,*e,*e,*e,*e,*e]\n\
+g: &g [*f,*f,*f,*f,*f,*f,*f,*f,*f]\n\
+h: [*g,*g,*g,*g,*g,*g,*g,*g,*g]\n";
+        assert!(load(bomb).is_err());
+    }
+
+    #[test]
+    fn oversized_payload_is_rejected() {
+        let big = format!(
+            "- id: mc-001\n  comments:\n    - by: A\n      at: \"2026-01-01T00:00:00Z\"\n      text: {}\n",
+            "x".repeat(super::MAX_PAYLOAD_BYTES + 1)
+        );
+        let err = load(&big).unwrap_err();
+        assert!(err.contains("too large"), "got: {err}");
     }
 }

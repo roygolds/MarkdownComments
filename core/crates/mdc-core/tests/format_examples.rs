@@ -194,3 +194,155 @@ fn full_edit_lifecycle() {
     assert!(!src.contains("MarkdownComments"));
     assert!(src.starts_with("A paragraph to comment on."));
 }
+
+#[test]
+fn reattach_moves_thread_to_a_new_block_creating_a_fence() {
+    let src = "```MarkdownComments\n- id: mc-001\n  quote: \"Alpha\"\n  comments:\n    - by: A\n      at: \"2026-01-01T00:00:00Z\"\n      text: hi\n```\nAlpha block.\n\nBravo block.\n";
+    let off = src.find("Bravo block.").unwrap();
+    let r = mdc_core::edit::reattach_thread(src, "mc-001", Some("Bravo"), Some(off));
+    assert!(r.ok);
+    assert_eq!(
+        r.edits.len(),
+        2,
+        "a move produces a source + destination edit"
+    );
+    let out = apply_edits(src, &r.edits);
+    let doc = parse_document(&out);
+    assert_eq!(
+        doc.fences.len(),
+        1,
+        "source fence removed, one new fence created"
+    );
+    let pt = &doc.fences[0].threads[0];
+    assert_eq!(pt.thread.id, "mc-001");
+    assert_eq!(pt.thread.quote.as_deref(), Some("Bravo"));
+    assert!(matches!(
+        pt.anchor,
+        mdc_core::model::AnchorState::Quoted { .. }
+    ));
+    assert_roundtrips(&out);
+}
+
+#[test]
+fn reattach_appends_to_an_existing_destination_fence() {
+    let src = "```MarkdownComments\n- id: mc-001\n  quote: \"Alpha\"\n  comments:\n    - by: A\n      at: \"2026-01-01T00:00:00Z\"\n      text: one\n```\nAlpha block.\n\n```MarkdownComments\n- id: mc-002\n  quote: \"Bravo\"\n  comments:\n    - by: B\n      at: \"2026-01-01T00:00:00Z\"\n      text: two\n```\nBravo block.\n";
+    let off = src.find("Bravo block.").unwrap();
+    let r = mdc_core::edit::reattach_thread(src, "mc-001", Some("Bravo"), Some(off));
+    assert!(r.ok);
+    let out = apply_edits(src, &r.edits);
+    let doc = parse_document(&out);
+    assert_eq!(doc.fences.len(), 1, "no second fence is created over Bravo");
+    let ids: Vec<&str> = doc.fences[0]
+        .threads
+        .iter()
+        .map(|t| t.thread.id.as_str())
+        .collect();
+    assert_eq!(ids, vec!["mc-002", "mc-001"]);
+    assert_roundtrips(&out);
+}
+
+#[test]
+fn anchor_is_stable_across_common_edits() {
+    let base = "```MarkdownComments\n- id: mc-001\n  quote: \"target\"\n  comments:\n    - by: A\n      at: \"2026-01-01T00:00:00Z\"\n      text: hi\n```\nThe target paragraph here.\n";
+    assert!(matches!(
+        parse_document(base).fences[0].threads[0].anchor,
+        mdc_core::model::AnchorState::Quoted { .. }
+    ));
+
+    // Inserting content above the fence shifts offsets but keeps the anchor.
+    let above = format!("Intro added above.\n\n{base}");
+    assert!(matches!(
+        parse_document(&above).fences[0].threads[0].anchor,
+        mdc_core::model::AnchorState::Quoted { .. }
+    ));
+
+    // Editing text after the quote within the same block keeps the anchor.
+    let after = base.replace("paragraph here.", "paragraph here, now longer.");
+    assert!(matches!(
+        parse_document(&after).fences[0].threads[0].anchor,
+        mdc_core::model::AnchorState::Quoted { .. }
+    ));
+
+    // Editing the quoted substring itself surfaces a needs-reattach, never a
+    // silent mis-anchor.
+    let drifted = base.replace("The target paragraph", "The tgt paragraph");
+    assert!(matches!(
+        parse_document(&drifted).fences[0].threads[0].anchor,
+        mdc_core::model::AnchorState::NeedsReattach { .. }
+    ));
+}
+
+#[test]
+fn multiline_quote_with_fence_chars_roundtrips() {
+    // A multi-line quote at thread indent (continuation indent 4) containing a
+    // ``` line must survive emit/parse without splitting the fence — the
+    // tightest fence-breakout path.
+    let base = "Target block.\n";
+    let multiline_quote = "line one\n```\nline three";
+    let r = mdc_core::edit::create_thread(
+        base,
+        0,
+        Some(multiline_quote),
+        "A",
+        "2026-01-01T00:00:00Z",
+        "note",
+    );
+    assert!(r.ok);
+    let out = apply_edits(base, &r.edits);
+    let doc = parse_document(&out);
+    assert_eq!(doc.fences.len(), 1);
+    assert_eq!(doc.fences[0].threads.len(), 1, "no phantom thread forged");
+    assert_eq!(
+        doc.fences[0].threads[0].thread.quote.as_deref(),
+        Some(multiline_quote)
+    );
+    assert_roundtrips(&out);
+}
+
+#[test]
+fn stacked_fences_each_bind_the_next_block() {
+    let src = "```MarkdownComments\n- id: mc-001\n  comments:\n    - by: A\n      at: \"2026-01-01T00:00:00Z\"\n      text: one\n```\n```MarkdownComments\n- id: mc-002\n  comments:\n    - by: B\n      at: \"2026-01-01T00:00:00Z\"\n      text: two\n```\nShared block.\n";
+    let doc = parse_document(src);
+    assert_eq!(doc.fences.len(), 2);
+    let starts: Vec<usize> = doc
+        .fences
+        .iter()
+        .map(|f| match f.target {
+            mdc_core::model::Target::Block { start, .. } => start,
+            _ => panic!("expected a block target"),
+        })
+        .collect();
+    let shared = src.find("Shared block.").unwrap();
+    assert_eq!(
+        starts,
+        vec![shared, shared],
+        "both fences bind the same block"
+    );
+}
+
+#[test]
+fn ambiguous_quote_anchors_to_first_occurrence_in_block() {
+    let src = "```MarkdownComments\n- id: mc-001\n  quote: \"DUP\"\n  comments:\n    - by: A\n      at: \"2026-01-01T00:00:00Z\"\n      text: hi\n```\nDUP first then DUP second.\n";
+    let doc = parse_document(src);
+    let (ts, te) = match doc.fences[0].target {
+        mdc_core::model::Target::Block { start, end, .. } => (start, end),
+        _ => panic!("expected block target"),
+    };
+    let first = ts + src[ts..te].find("DUP").unwrap();
+    match doc.fences[0].threads[0].anchor {
+        mdc_core::model::AnchorState::Quoted { start, .. } => assert_eq!(start, first),
+        ref other => panic!("expected quoted anchor, got {other:?}"),
+    }
+}
+
+#[test]
+fn editing_an_ambiguous_duplicate_id_is_rejected() {
+    let src = "```MarkdownComments\n- id: mc-001\n  comments:\n    - by: A\n      at: \"2026-01-01T00:00:00Z\"\n      text: one\n```\nBlock A.\n\n```MarkdownComments\n- id: mc-001\n  comments:\n    - by: B\n      at: \"2026-01-01T00:00:00Z\"\n      text: two\n```\nBlock B.\n";
+    let r = mdc_core::edit::add_reply(src, "mc-001", "C", "2026-01-02T00:00:00Z", "reply");
+    assert!(!r.ok, "editing an ambiguous id must be rejected");
+    assert!(
+        r.rejected.as_deref().unwrap_or("").contains("ambiguous"),
+        "got: {:?}",
+        r.rejected
+    );
+}

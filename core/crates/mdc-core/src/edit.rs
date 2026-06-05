@@ -66,16 +66,34 @@ pub fn apply_edits(src: &str, edits: &[TextEdit]) -> String {
 }
 
 /// Find the parsed fence (in `doc`) and the index of `thread_id` within it.
+///
+/// Returns an error if the id is missing, or if it is ambiguous (the same id
+/// appears more than once in the document — a supported-but-flagged state after
+/// a Git merge). Editing an ambiguous id is rejected so an operation can never
+/// silently mutate the wrong thread; the duplicate must be resolved first.
 fn locate_thread<'a>(
     doc: &'a crate::ParsedDocument,
     thread_id: &str,
-) -> Option<(&'a ParsedFence, usize)> {
+) -> Result<(&'a ParsedFence, usize), &'static str> {
+    let mut found: Option<(&'a ParsedFence, usize)> = None;
+    let mut count = 0usize;
     for fence in &doc.fences {
-        if let Some(i) = fence.threads.iter().position(|t| t.thread.id == thread_id) {
-            return Some((fence, i));
+        for (i, t) in fence.threads.iter().enumerate() {
+            if t.thread.id == thread_id {
+                count += 1;
+                if found.is_none() {
+                    found = Some((fence, i));
+                }
+            }
         }
     }
-    None
+    match (found, count) {
+        (Some(v), 1) => Ok(v),
+        (Some(_), _) => {
+            Err("thread id is ambiguous (appears multiple times); resolve the duplicate id first")
+        }
+        (None, _) => Err("thread not found"),
+    }
 }
 
 fn threads_of(fence: &ParsedFence) -> Vec<Thread> {
@@ -132,8 +150,9 @@ fn guard_editable(fence: &ParsedFence) -> Option<EditResult> {
 /// Append a reply to an existing thread.
 pub fn add_reply(src: &str, thread_id: &str, by: &str, at: &str, text: &str) -> EditResult {
     let doc = parse_document(src);
-    let Some((fence, idx)) = locate_thread(&doc, thread_id) else {
-        return EditResult::rejected("thread not found");
+    let (fence, idx) = match locate_thread(&doc, thread_id) {
+        Ok(v) => v,
+        Err(msg) => return EditResult::rejected(msg),
     };
     if let Some(r) = guard_editable(fence) {
         return r;
@@ -155,8 +174,9 @@ pub fn edit_comment(
     new_text: &str,
 ) -> EditResult {
     let doc = parse_document(src);
-    let Some((fence, idx)) = locate_thread(&doc, thread_id) else {
-        return EditResult::rejected("thread not found");
+    let (fence, idx) = match locate_thread(&doc, thread_id) {
+        Ok(v) => v,
+        Err(msg) => return EditResult::rejected(msg),
     };
     if let Some(r) = guard_editable(fence) {
         return r;
@@ -178,8 +198,9 @@ pub fn set_thread_status(
     at: Option<&str>,
 ) -> EditResult {
     let doc = parse_document(src);
-    let Some((fence, idx)) = locate_thread(&doc, thread_id) else {
-        return EditResult::rejected("thread not found");
+    let (fence, idx) = match locate_thread(&doc, thread_id) {
+        Ok(v) => v,
+        Err(msg) => return EditResult::rejected(msg),
     };
     if let Some(r) = guard_editable(fence) {
         return r;
@@ -201,8 +222,9 @@ pub fn set_thread_status(
 /// Delete a whole thread, removing the fence if it becomes empty.
 pub fn delete_thread(src: &str, thread_id: &str) -> EditResult {
     let doc = parse_document(src);
-    let Some((fence, idx)) = locate_thread(&doc, thread_id) else {
-        return EditResult::rejected("thread not found");
+    let (fence, idx) = match locate_thread(&doc, thread_id) {
+        Ok(v) => v,
+        Err(msg) => return EditResult::rejected(msg),
     };
     if let Some(r) = guard_editable(fence) {
         return r;
@@ -216,8 +238,9 @@ pub fn delete_thread(src: &str, thread_id: &str) -> EditResult {
 /// comment in the thread.
 pub fn delete_comment(src: &str, thread_id: &str, comment_index: usize) -> EditResult {
     let doc = parse_document(src);
-    let Some((fence, idx)) = locate_thread(&doc, thread_id) else {
-        return EditResult::rejected("thread not found");
+    let (fence, idx) = match locate_thread(&doc, thread_id) {
+        Ok(v) => v,
+        Err(msg) => return EditResult::rejected(msg),
     };
     if let Some(r) = guard_editable(fence) {
         return r;
@@ -332,8 +355,9 @@ pub fn reattach_thread(
     new_anchor_offset: Option<usize>,
 ) -> EditResult {
     let doc = parse_document(src);
-    let Some((fence, idx)) = locate_thread(&doc, thread_id) else {
-        return EditResult::rejected("thread not found");
+    let (fence, idx) = match locate_thread(&doc, thread_id) {
+        Ok(v) => v,
+        Err(msg) => return EditResult::rejected(msg),
     };
     if let Some(r) = guard_editable(fence) {
         return r;

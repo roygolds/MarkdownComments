@@ -27,6 +27,11 @@ fn line_kind(line: &str) -> Option<u8> {
 }
 
 /// Scan a document for conflict regions.
+///
+/// A region normally spans from a `<<<<<<<` line to the end of its matching
+/// `>>>>>>>` line. An *unterminated* conflict (a `<<<<<<<` with no closing
+/// `>>>>>>>`) still indicates a broken merge, so it is reported as a region
+/// extending to the end of the document rather than being silently ignored.
 pub fn scan(src: &str) -> Vec<ConflictRegion> {
     let mut regions = Vec::new();
     let mut open: Option<usize> = None;
@@ -46,6 +51,12 @@ pub fn scan(src: &str) -> Vec<ConflictRegion> {
             _ => {}
         }
         offset += line.len();
+    }
+    if let Some(start) = open {
+        regions.push(ConflictRegion {
+            start,
+            end: src.len(),
+        });
     }
     regions
 }
@@ -72,5 +83,17 @@ mod tests {
     #[test]
     fn no_conflict() {
         assert!(scan("just normal\ntext\n").is_empty());
+    }
+
+    #[test]
+    fn detects_unterminated_conflict() {
+        // A dangling `<<<<<<<` with no closing marker still flags a region
+        // (extending to EOF) so edits near it are blocked.
+        let src = "a\n<<<<<<< ours\nx\n=======\ny\nb\n";
+        let regions = scan(src);
+        assert_eq!(regions.len(), 1);
+        let r = regions[0];
+        assert!(src[r.start..r.end].starts_with("<<<<<<<"));
+        assert_eq!(r.end, src.len());
     }
 }

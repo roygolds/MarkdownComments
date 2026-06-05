@@ -57,3 +57,15 @@ Inline fenced blocks are the selected first-release storage model.
 - Render comment text as escaped plain text only.
 - Validate Markdown Preview paths against script injection and unsafe HTML.
 - Make display names and timestamps explicit and public in the repository. `by` defaults to the local Git `user.name`, overridable by an extension setting; timestamps are stored in UTC.
+
+### Identity trust model
+
+- `by`, `at`, `resolvedBy`, and `resolvedAt` are **advisory display metadata, not authenticated identity**. They are plain text written by the local extension and committed verbatim, so anyone with write access can hand-edit a file to attribute, backdate, or deny a comment.
+- The authoritative audit trail is the **Git history** of the Markdown file (commit author, `git blame`, and — where enabled — signed commits). In-document signatures, hashes, or event logs are out of scope.
+- The OS account name is never used as an author fallback (to avoid leaking the local username into shared files); when no setting and no Git `user.name` are available the author is recorded as `Unknown`.
+
+### Parser hardening
+
+- The YAML reader rejects payloads larger than a fixed size cap (1 MiB) and relies on libyaml's repetition limit to reject alias/anchor "billion laughs" bombs, so parsing untrusted documents on every keystroke stays bounded.
+- Git conflict regions — including an unterminated `<<<<<<<` with no closing marker — are detected and surfaced as diagnostics; overlapping fences are never parsed or auto-merged, and edits to them are rejected.
+

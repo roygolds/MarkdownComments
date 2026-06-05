@@ -3,10 +3,11 @@
 
 import * as vscode from "vscode";
 import { execFile } from "child_process";
-import * as os from "os";
 
-let cachedGitName: string | undefined;
-let gitLookupDone = false;
+// Git `user.name` is cached per workspace folder so that, in a multi-root
+// workspace, comments in one folder are not misattributed using another
+// folder's configured identity.
+const gitNameCache = new Map<string, string | undefined>();
 
 function gitUserName(cwd: string | undefined): Promise<string | undefined> {
   return new Promise((resolve) => {
@@ -23,7 +24,11 @@ function gitUserName(cwd: string | undefined): Promise<string | undefined> {
 
 /**
  * Resolve the author name: the `markdownComments.authorName` setting takes
- * precedence, then the local Git `user.name`, then the OS username.
+ * precedence, then the local Git `user.name`, then a neutral `"Unknown"`.
+ *
+ * The OS account name is intentionally never used as a fallback: the resolved
+ * name is written into a file that is committed and shared, so leaking the
+ * local username would be an unintended disclosure.
  */
 export async function resolveAuthor(resource?: vscode.Uri): Promise<string> {
   const configured = vscode.workspace
@@ -32,20 +37,19 @@ export async function resolveAuthor(resource?: vscode.Uri): Promise<string> {
   if (configured && configured.trim().length > 0) {
     return configured.trim();
   }
-  if (!gitLookupDone) {
-    const folder = resource
-      ? vscode.workspace.getWorkspaceFolder(resource)?.uri.fsPath
-      : vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-    cachedGitName = await gitUserName(folder);
-    gitLookupDone = true;
+  const folder = resource
+    ? vscode.workspace.getWorkspaceFolder(resource)?.uri.fsPath
+    : vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  const cacheKey = folder ?? "";
+  if (!gitNameCache.has(cacheKey)) {
+    gitNameCache.set(cacheKey, await gitUserName(folder));
   }
-  return cachedGitName ?? os.userInfo().username ?? "Unknown";
+  return gitNameCache.get(cacheKey) ?? "Unknown";
 }
 
 /** Clear cached Git identity (used when configuration changes). */
 export function clearIdentityCache(): void {
-  gitLookupDone = false;
-  cachedGitName = undefined;
+  gitNameCache.clear();
 }
 
 /** Current time as a UTC ISO-8601 timestamp with a `Z` suffix, second precision. */

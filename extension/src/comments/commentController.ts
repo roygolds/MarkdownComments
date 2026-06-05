@@ -119,13 +119,24 @@ export class CommentManager implements vscode.Disposable {
   /** Re-parse a document and rebuild its threads, decorations, and diagnostics. */
   refresh(document: vscode.TextDocument): void {
     const key = document.uri.toString();
+
+    const text = document.getText();
+    let result;
+    try {
+      result = core.parse(text);
+    } catch (err) {
+      // Parsing should never throw, but if the WASM boundary surfaces an
+      // unexpected error we keep the previously rendered threads rather than
+      // wiping the UI, and surface the failure for diagnosis.
+      console.error("MarkdownComments: failed to parse document", err);
+      return;
+    }
+
     const previous = this.threadsByUri.get(key) ?? [];
     for (const t of previous) {
       t.dispose();
     }
 
-    const text = document.getText();
-    const result = core.parse(text);
     const showResolved = vscode.workspace
       .getConfiguration("markdownComments", document.uri)
       .get<boolean>("showResolved", true);
@@ -190,7 +201,7 @@ export class CommentManager implements vscode.Disposable {
     vsThread.collapsibleState =
       resolved && !showResolved
         ? vscode.CommentThreadCollapsibleState.Collapsed
-        : vscode.CommentThreadCollapsibleState.Collapsed;
+        : vscode.CommentThreadCollapsibleState.Expanded;
 
     return vsThread;
   }
@@ -319,7 +330,14 @@ export class CommentManager implements vscode.Disposable {
       return;
     }
     const src = editor.document.getText();
-    const parsed = core.parse(src);
+    let parsed;
+    try {
+      parsed = core.parse(src);
+    } catch (err) {
+      console.error("MarkdownComments: failed to parse document", err);
+      void vscode.window.showErrorMessage("MarkdownComments: could not parse this document.");
+      return;
+    }
     const candidates: ThreadView[] = [];
     for (const fence of parsed.fences) {
       for (const thread of fence.threads) {

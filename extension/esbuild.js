@@ -11,8 +11,16 @@ const watch = process.argv.includes("--watch");
 function copyNative() {
   const src = path.join(__dirname, "native", "mdc");
   const dest = path.join(__dirname, "dist", "native", "mdc");
-  if (!fs.existsSync(src)) {
-    console.warn("[esbuild] native/mdc not found; build the WASM core first (wasm-pack).");
+  const wasm = path.join(src, "mdc_wasm_bg.wasm");
+  if (!fs.existsSync(src) || !fs.existsSync(wasm)) {
+    const msg =
+      "[esbuild] native/mdc (mdc_wasm_bg.wasm) not found; build the WASM core first (wasm-pack).";
+    // In a production/package build a missing .wasm would ship a broken VSIX,
+    // so fail loudly instead of silently producing an unusable extension.
+    if (production) {
+      throw new Error(msg);
+    }
+    console.warn(msg);
     return;
   }
   fs.mkdirSync(dest, { recursive: true });
