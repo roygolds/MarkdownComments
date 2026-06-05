@@ -29,3 +29,6 @@ The first implementation should prove that Markdown comments can be stored separ
 
 AI agents should start with `AGENTS.md`, then read the relevant files in `docs\` and `squad\agents.yml` before making changes. Significant product, architecture, security, or testing decisions should be captured in documentation or decision records.
 
+## License
+
+MarkdownComments is licensed under the MIT License. See `LICENSE` for details.
