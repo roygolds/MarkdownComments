@@ -1,0 +1,172 @@
+/* Styles for comment cards and controls inside VS Code's built-in Markdown
+   preview. Loaded via the `markdown.previewStyles` contribution so the cards
+   rendered by the markdown-it plugin are themed consistently. */
+
+.markdown-comments {
+  margin: 10px 0 14px;
+  border: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.35));
+  border-radius: 6px;
+  background: var(--vscode-editorWidget-background, rgba(128, 128, 128, 0.06));
+  overflow: hidden;
+}
+
+.markdown-comments__label {
+  font-size: 0.85em;
+  font-weight: 600;
+  padding: 6px 10px;
+  color: var(--vscode-descriptionForeground);
+  border-bottom: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.25));
+}
+
+.markdown-comments--invalid {
+  border-color: var(--vscode-inputValidation-warningBorder, #c8a000);
+  padding: 8px 10px;
+}
+
+.mdc-raw {
+  white-space: pre-wrap;
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: 0.85em;
+  margin: 6px 0 0;
+}
+
+.mdc-thread {
+  padding: 8px 10px;
+  border-top: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.18));
+}
+
+.mdc-thread:first-of-type {
+  border-top: none;
+}
+
+.mdc-thread__header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mdc-thread__id {
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: 0.8em;
+  color: var(--vscode-descriptionForeground);
+}
+
+.mdc-badge {
+  font-size: 0.72em;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 1px 6px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+}
+
+.mdc-badge--open {
+  color: var(--vscode-charts-blue, #4a9eff);
+  border-color: currentColor;
+}
+
+.mdc-badge--resolved {
+  color: var(--vscode-charts-green, #4caf50);
+  border-color: currentColor;
+}
+
+.mdc-collapse {
+  font: inherit;
+  cursor: pointer;
+  background: none;
+  border: none;
+  color: var(--vscode-foreground);
+  padding: 0 2px;
+  line-height: 1;
+}
+
+.mdc-thread--collapsed .mdc-collapse {
+  transform: rotate(-90deg);
+}
+
+.mdc-thread--collapsed .mdc-thread__body {
+  display: none;
+}
+
+.mdc-thread__body {
+  margin-top: 6px;
+}
+
+.mdc-quote {
+  font-style: italic;
+  color: var(--vscode-descriptionForeground);
+  border-left: 2px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.5));
+  padding-left: 8px;
+  margin-bottom: 6px;
+}
+
+.mdc-quote--missing {
+  color: var(--vscode-editorWarning-foreground, #c8a000);
+}
+
+.mdc-comment {
+  padding: 5px 0;
+}
+
+.mdc-comment__meta {
+  font-size: 0.82em;
+  color: var(--vscode-descriptionForeground);
+}
+
+.mdc-comment__by {
+  font-weight: 600;
+  color: var(--vscode-foreground);
+}
+
+.mdc-comment__text {
+  white-space: pre-wrap;
+  margin-top: 2px;
+}
+
+/* Action buttons from the shared renderer are not wired up in the built-in
+   preview (no write-back channel); hide them to avoid dead controls. */
+.markdown-comments .mdc-thread__actions,
+.markdown-comments .mdc-comment__actions,
+.markdown-comments .mdc-reply {
+  display: none;
+}
+
+/* Floating toolbar injected by preview.js */
+.mdc-pv-toolbar {
+  position: fixed;
+  top: 8px;
+  right: 12px;
+  z-index: 50;
+  display: flex;
+  gap: 6px;
+  padding: 4px;
+  border-radius: 6px;
+  background: var(--vscode-editorWidget-background, rgba(40, 40, 40, 0.9));
+  border: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.4));
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+}
+
+.mdc-pv-toolbar__btn {
+  font: inherit;
+  font-size: 0.8em;
+  cursor: pointer;
+  padding: 2px 8px;
+  border-radius: 4px;
+  color: var(--vscode-button-secondaryForeground, var(--vscode-foreground));
+  background: var(--vscode-button-secondaryBackground, transparent);
+  border: 1px solid var(--vscode-button-border, var(--vscode-panel-border, rgba(128, 128, 128, 0.4)));
+}
+
+.mdc-pv-toolbar__btn[aria-pressed="true"] {
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+  border-color: var(--vscode-button-background);
+}
+
+.mdc-pv-hide .markdown-comments {
+  display: none;
+}
+
+.mdc-pv-collapse .mdc-thread__body {
+  display: none;
+}

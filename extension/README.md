@@ -18,6 +18,12 @@ diff cleanly in Git.
   non-UTC timestamps — always non-destructive.
 - **Markdown Preview integration**: comment fences render as comment cards
   (like Mermaid diagrams), never as raw code.
+- **Interactive Comments Preview panel**: run *MarkdownComments: Open Comments
+  Preview* (or use the editor title button) to reply, edit, resolve, reopen, and
+  delete comments directly from a side-by-side preview.
+- **Hide & collapse controls**: hide all comments, collapse comment bodies, hide
+  resolved threads, or collapse individual threads — in both the panel and the
+  built-in Markdown preview.
 
 ## How it works
 

@@ -3,10 +3,22 @@
 
 import * as vscode from "vscode";
 import { CommentManager, MarkdownComment } from "./comments/commentController";
-import { extendMarkdownIt } from "./preview/markdownItPlugin";
+import { extendMarkdownIt, applyMarkdownCommentsPlugin } from "./preview/markdownItPlugin";
+import { CommentsPreviewPanel } from "./preview/previewPanel";
+import {
+  validateInboundMessage,
+  evaluateLiveGuard,
+  computeEdit
+} from "./preview/messageValidation";
 import { clearIdentityCache } from "./model/identity";
 
-export function activate(context: vscode.ExtensionContext): { extendMarkdownIt: typeof extendMarkdownIt } {
+export function activate(context: vscode.ExtensionContext): {
+  extendMarkdownIt: typeof extendMarkdownIt;
+  applyMarkdownCommentsPlugin: typeof applyMarkdownCommentsPlugin;
+  validateInboundMessage: typeof validateInboundMessage;
+  evaluateLiveGuard: typeof evaluateLiveGuard;
+  computeEdit: typeof computeEdit;
+} {
   const manager = new CommentManager();
   context.subscriptions.push(manager);
 
@@ -24,6 +36,16 @@ export function activate(context: vscode.ExtensionContext): { extendMarkdownIt: 
   register("markdownComments.deleteThread", (thread: vscode.CommentThread) => manager.deleteThread(thread));
   register("markdownComments.reattach", () => manager.reattach());
   register("markdownComments.toggleResolved", () => manager.toggleResolved());
+  register("markdownComments.openPreview", () => {
+    const editor = vscode.window.activeTextEditor;
+    if (!editor || editor.document.languageId !== "markdown") {
+      void vscode.window.showInformationMessage(
+        "MarkdownComments: open a Markdown file to show its comments preview."
+      );
+      return;
+    }
+    CommentsPreviewPanel.createOrShow(context.extensionUri, editor.document);
+  });
 
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration((e) => {
@@ -33,7 +55,13 @@ export function activate(context: vscode.ExtensionContext): { extendMarkdownIt: 
     })
   );
 
-  return { extendMarkdownIt };
+  return {
+    extendMarkdownIt,
+    applyMarkdownCommentsPlugin,
+    validateInboundMessage,
+    evaluateLiveGuard,
+    computeEdit
+  };
 }
 
 export function deactivate(): void {

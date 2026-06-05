@@ -10,6 +10,7 @@ Use a local-first VS Code extension with Markdown files as the primary content a
 - Comment service: map threads to VS Code comments and commands for create, reply, edit, resolve, reopen, delete, and manual reattach. New IDs use the max existing numeric suffix in the file plus one; `by` defaults to the local Git `user.name`.
 - Markdown writer: make minimal text edits that preserve readable source and never silently merge duplicate IDs or Git conflicts. Stored timestamps are UTC with a `Z` suffix.
 - Preview renderer: hide comment fences and render safe pins, cards, or highlights near the attached block or quote.
+- Interactive comments preview panel: a dedicated webview (separate from VS Code's built-in Markdown preview) that renders the document plus interactive comment cards and lets the user reply, edit, resolve, reopen, delete, hide, and collapse comments. It is required because the built-in Markdown preview exposes no supported channel to write edits back to the extension; built-in preview support is therefore limited to read-only cards plus hide/collapse affordances.
 
 ## Domain model
 
@@ -63,6 +64,13 @@ Inline fenced blocks are the selected first-release storage model.
 - `by`, `at`, `resolvedBy`, and `resolvedAt` are **advisory display metadata, not authenticated identity**. They are plain text written by the local extension and committed verbatim, so anyone with write access can hand-edit a file to attribute, backdate, or deny a comment.
 - The authoritative audit trail is the **Git history** of the Markdown file (commit author, `git blame`, and — where enabled — signed commits). In-document signatures, hashes, or event logs are out of scope.
 - The OS account name is never used as an author fallback (to avoid leaking the local username into shared files); when no setting and no Git `user.name` are available the author is recorded as `Unknown`.
+
+### Preview panel webview hardening
+
+- The interactive preview panel renders Markdown with `html: false` and a strict Content-Security-Policy: `default-src 'none'`, nonce-gated `script-src` (no `unsafe-inline`/`eval`), and `localResourceRoots` scoped to the extension's `media/` folder. The nonce is generated with a cryptographic RNG.
+- All document-derived content (comment text, author, timestamp, thread id, quote, and any invalid raw payload) is HTML-escaped before being placed in element text or attributes, and is never interpolated into JavaScript. The webview script only reads `data-` attributes and element text and assigns user input to `textarea.value`.
+- Every inbound webview message is validated as hostile (known type, bounded string lengths, integer indices) and guarded by both the document `uri` and `docVersion`; the version is re-checked after every `await` so a concurrent external edit cannot make a positional edit land on the wrong range. Operations are serialized and `deleteThread` requires a modal confirmation. The Rust/WASM core remains the authority and rejects ambiguous edits.
+- Accepted residuals: the panel allows remote (`https:`/`data:`) images in the rendered Markdown body, matching VS Code's own preview behavior (a malicious document could beacon on open); and raw HTML elsewhere in the document may still render in VS Code's **built-in** preview, which controls its own markdown-it `html` setting — the extension's comment cards remain escaped regardless.
 
 ### Parser hardening
 
