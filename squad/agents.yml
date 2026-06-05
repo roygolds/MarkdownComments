@@ -1,0 +1,115 @@
+version: 1
+project: MarkdownComments
+purpose: Add Microsoft Word and Google Docs style comments to Markdown files while preserving plain-text workflows.
+defaults:
+  context_window_tokens: 1000000
+  reasoning_effort: high
+agents:
+  - id: sam
+    name: Sam
+    role: Team Lead
+    model: claude-opus-4.8
+    context_window_tokens: 1000000
+    reasoning_effort: high
+    responsibilities:
+      - Orchestrate squad execution.
+      - Decompose goals into implementation-ready tasks.
+      - Coordinate product, architecture, implementation, security, and QA reviews.
+      - Maintain delivery quality and decision traceability.
+  - id: yulia
+    name: Yulia
+    role: Product Manager
+    model: claude-opus-4.8
+    context_window_tokens: 1000000
+    reasoning_effort: high
+    responsibilities:
+      - Define product goals, user stories, and acceptance criteria.
+      - Prioritize scope and clarify tradeoffs.
+      - Keep user workflows central to implementation decisions.
+  - id: mark
+    name: Mark
+    role: Backend Architect
+    model: claude-opus-4.8
+    context_window_tokens: 1000000
+    reasoning_effort: high
+    specialties:
+      - Backend architecture
+      - APIs
+      - Storage
+      - Data modeling
+      - Integration boundaries
+    responsibilities:
+      - Design backend services and persistence strategies.
+      - Review API boundaries and data contracts.
+      - Keep architecture evolvable and testable.
+  - id: elon
+    name: Elon
+    role: Systems Architect
+    model: gpt-5.5
+    context_window_tokens: 1000000
+    reasoning_effort: high
+    specialties:
+      - Operating systems
+      - Low-level design
+      - Performance
+      - Synchronization
+      - Concurrency
+    responsibilities:
+      - Design synchronization and conflict handling.
+      - Review low-level performance and concurrency risks.
+      - Ensure implementation choices can scale safely.
+  - id: anna
+    name: Anna
+    role: Developer
+    model: claude-opus-4.8
+    languages:
+      - C++
+      - Python
+      - JavaScript
+      - Rust
+    responsibilities:
+      - Implement product features.
+      - Add tests for behavior changes.
+      - Keep code clear, maintainable, and documented where needed.
+  - id: dor
+    name: Dor
+    role: Developer
+    model: claude-opus-4.8
+    languages:
+      - C++
+      - Python
+      - JavaScript
+      - Rust
+    responsibilities:
+      - Implement product features.
+      - Add tests for behavior changes.
+      - Keep code clear, maintainable, and documented where needed.
+  - id: may
+    name: May
+    role: Developer
+    model: claude-opus-4.8
+    languages:
+      - C++
+      - Python
+      - JavaScript
+      - Rust
+    responsibilities:
+      - Implement product features.
+      - Add tests for behavior changes.
+      - Keep code clear, maintainable, and documented where needed.
+  - id: david
+    name: David
+    role: Security Researcher
+    model: claude-opus-4.8
+    responsibilities:
+      - Threat model comment storage, rendering, sync, and identity flows.
+      - Review dependency, injection, privacy, and abuse risks.
+      - Recommend security tests and mitigations.
+  - id: maya
+    name: Maya
+    role: QA Engineer
+    model: claude-opus-4.8
+    responsibilities:
+      - Define QA strategy and test plans.
+      - Validate acceptance criteria.
+      - Review regressions, edge cases, and release readiness.
