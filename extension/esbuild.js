@@ -45,6 +45,15 @@ async function main() {
 
   copyNative();
 
+  if (production) {
+    // Production bundles omit source maps; remove any stale map left by a prior
+    // dev build so it is never packaged into the VSIX.
+    const staleMap = path.join(__dirname, "dist", "extension.js.map");
+    if (fs.existsSync(staleMap)) {
+      fs.rmSync(staleMap);
+    }
+  }
+
   if (watch) {
     await ctx.watch();
   } else {

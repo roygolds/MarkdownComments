@@ -70,6 +70,24 @@ when a source editor for the file is visible and
 the built-in preview open and no visible editor, the click opens the source
 editor beside the preview instead.
 
+### Versioning of builds
+
+`package.json` keeps a clean base version (`X.Y.Z`). Packaged builds are stamped
+with a local timestamp so every artifact is uniquely traceable:
+
+```
+X.Y.Z-YYYYMMDD-HHMMSS      e.g. 0.1.0-20260605-230038
+```
+
+- `npm run package` builds a `.vsix` whose version carries the timestamp, then
+  restores `package.json` to its clean base version (the working tree stays
+  clean). The stamped version is what shows in the Extensions view after install,
+  so you can confirm exactly which build is running.
+- `npm run version:stamp` prints the stamped version without writing it.
+- `npm run version:stamp:write` writes the stamped version into `package.json`
+  (useful before an `F5` session if you want the Extension Development Host to
+  display the timestamp); `npm run version:reset` strips it back to the base.
+
 ## Settings
 
 - `markdownComments.authorName`: display name for new comments (defaults to the

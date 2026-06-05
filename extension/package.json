@@ -240,7 +240,11 @@
     "pretest:integration": "npm run build",
     "test:integration": "node test/runTest.js",
     "test": "npm run test:unit",
-    "package": "npx --yes @vscode/vsce package --no-dependencies"
+    "vscode:prepublish": "npm run build",
+    "version:stamp": "node scripts/stamp-version.js",
+    "version:stamp:write": "node scripts/stamp-version.js --write",
+    "version:reset": "node scripts/stamp-version.js --reset",
+    "package": "node scripts/package.js"
   },
   "dependencies": {
     "markdown-it": "^14.1.0"

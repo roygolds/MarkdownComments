@@ -8,6 +8,7 @@ native/**
 **/*.map
 **/tsconfig*.json
 esbuild.js
+scripts/**
 .gitignore
 .eslintrc*
 node_modules/**
@@ -17,3 +18,6 @@ node_modules/**
 # Keep dist/ (bundled extension) and native/ (wasm glue) and package.json/README/LICENSE.
 !dist/**
 !dist/native/mdc/**
+
+# ...but never ship source maps, even from dist/.
+dist/**/*.map

@@ -30,6 +30,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Hide and collapse controls for comments in the panel, the sidebar, and
   VS Code's built-in Markdown preview: hide all comments, collapse all comment
   bodies, hide resolved threads, and collapse individual threads.
+- **Timestamped build versions**: `npm run package` stamps the version as
+  `X.Y.Z-YYYYMMDD-HHMMSS` (then restores the clean base version in
+  `package.json`), so each `.vsix` is uniquely identifiable and you can tell
+  which build is installed. Helper scripts: `version:stamp`,
+  `version:stamp:write`, and `version:reset`. A shared `F5` launch config
+  (`Run MarkdownComments Extension`) rebuilds the bundle before launching.
 
 ### Security
 
