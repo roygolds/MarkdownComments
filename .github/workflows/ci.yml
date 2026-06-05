@@ -1,0 +1,92 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  core:
+    name: Rust core (fmt, clippy, test)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: core
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+          targets: wasm32-unknown-unknown
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            core/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('core/Cargo.lock') }}
+      - name: Format check
+        run: cargo fmt --all -- --check
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+      - name: Test
+        run: cargo test --all
+
+  extension:
+    name: Extension (build wasm, lint, unit tests, package)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - name: Install wasm-pack
+        uses: jetli/wasm-pack-action@v0.4.0
+        with:
+          version: latest
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            core/target
+          key: ${{ runner.os }}-cargo-wasm-${{ hashFiles('core/Cargo.lock') }}
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: extension/package-lock.json
+      - name: Build WASM core
+        working-directory: core
+        run: wasm-pack build crates/mdc-wasm --target nodejs --release --out-dir ../../extension/native/mdc
+      - name: Install extension dependencies
+        working-directory: extension
+        run: npm ci
+      - name: Type-check
+        working-directory: extension
+        run: npm run lint
+      - name: Unit tests
+        working-directory: extension
+        run: npm run test:unit
+      - name: Bundle extension
+        working-directory: extension
+        run: npm run build
+      - name: Integration tests (VS Code)
+        working-directory: extension
+        run: xvfb-run -a npm run test:integration
+      - name: Package VSIX
+        working-directory: extension
+        run: |
+          npm install --no-save @vscode/vsce
+          npx vsce package --no-dependencies --out markdowncomments.vsix
+      - name: Upload VSIX artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: markdowncomments-vsix
+          path: extension/markdowncomments.vsix

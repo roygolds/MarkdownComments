@@ -31,3 +31,13 @@ coverage/
 out/
 *.log
 
+# Rust
+core/target/
+
+# Generated WASM artifacts (built by wasm-pack in CI / local build)
+extension/native/
+
+# VS Code extension packages
+*.vsix
+.vscode-test/
+

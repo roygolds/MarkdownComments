@@ -1,0 +1,19 @@
+# Exclude everything by default-style listing; keep only what the extension needs.
+.vscode/**
+.vscode-test/**
+test/**
+src/**
+native/**
+**/*.ts
+**/*.map
+**/tsconfig*.json
+esbuild.js
+.gitignore
+.eslintrc*
+node_modules/**
+**/.DS_Store
+**/*.vsix
+
+# Keep dist/ (bundled extension) and native/ (wasm glue) and package.json/README/LICENSE.
+!dist/**
+!dist/native/mdc/**

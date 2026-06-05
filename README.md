@@ -23,6 +23,34 @@ MarkdownComments is a project for adding collaborative commenting features to Ma
 | `docs\implementation-plan.md` | First-release implementation plan and task breakdown. |
 | `docs\squad.md` | Human-readable squad roster and collaboration model. |
 | `squad\agents.yml` | Machine-readable squad definition. |
+| `core\` | Rust workspace: `mdc-core` (pure engine) and `mdc-wasm` (WASM bindings). |
+| `extension\` | VS Code extension (TypeScript) consuming the WASM core. |
+
+## Building and testing
+
+The product is split into a pure Rust core (compiled to WebAssembly) and a
+TypeScript VS Code extension.
+
+```bash
+# Rust core: format, lint, test
+cd core
+cargo fmt --all -- --check
+cargo clippy --all-targets -- -D warnings
+cargo test --all
+
+# Build the WASM core into the extension
+wasm-pack build crates/mdc-wasm --target nodejs --release --out-dir ../../extension/native/mdc
+
+# Extension: install, type-check, unit tests, bundle
+cd ../extension
+npm install
+npm run lint
+npm run test:unit          # Node tests against the WASM core
+npm run build              # esbuild bundle into dist/
+npm run test:integration   # VS Code integration tests (downloads VS Code)
+```
+
+CI runs all of the above on every push and pull request (`.github\workflows\ci.yml`).
 
 ## Initial product direction
 

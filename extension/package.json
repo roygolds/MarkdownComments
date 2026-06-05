@@ -1,0 +1,217 @@
+{
+  "name": "markdowncomments",
+  "displayName": "MarkdownComments",
+  "description": "Microsoft Word / Google Docs style comments for Markdown files, stored inline and Git-friendly.",
+  "version": "0.1.0",
+  "publisher": "markdowncomments",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/roygolds/MarkdownComments"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onLanguage:markdown"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "markdown.markdownItPlugins": true,
+    "configuration": {
+      "title": "MarkdownComments",
+      "properties": {
+        "markdownComments.authorName": {
+          "type": "string",
+          "default": "",
+          "description": "Display name used when creating comments. Defaults to the local Git user.name when empty."
+        },
+        "markdownComments.showResolved": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show resolved comment threads inline. When disabled, resolved threads are collapsed in the editor."
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "markdownComments.addComment",
+        "title": "MarkdownComments: Add Comment",
+        "category": "MarkdownComments"
+      },
+      {
+        "command": "markdownComments.reply",
+        "title": "Reply",
+        "enablement": "commentController == markdownComments"
+      },
+      {
+        "command": "markdownComments.resolve",
+        "title": "Resolve Thread",
+        "enablement": "commentController == markdownComments"
+      },
+      {
+        "command": "markdownComments.reopen",
+        "title": "Reopen Thread",
+        "enablement": "commentController == markdownComments"
+      },
+      {
+        "command": "markdownComments.editComment",
+        "title": "Edit",
+        "enablement": "commentController == markdownComments"
+      },
+      {
+        "command": "markdownComments.saveComment",
+        "title": "Save",
+        "enablement": "commentController == markdownComments"
+      },
+      {
+        "command": "markdownComments.cancelEdit",
+        "title": "Cancel",
+        "enablement": "commentController == markdownComments"
+      },
+      {
+        "command": "markdownComments.deleteComment",
+        "title": "Delete Comment",
+        "enablement": "commentController == markdownComments"
+      },
+      {
+        "command": "markdownComments.deleteThread",
+        "title": "Delete Thread",
+        "enablement": "commentController == markdownComments"
+      },
+      {
+        "command": "markdownComments.reattach",
+        "title": "MarkdownComments: Reattach Thread to Selection",
+        "category": "MarkdownComments"
+      },
+      {
+        "command": "markdownComments.toggleResolved",
+        "title": "MarkdownComments: Toggle Resolved Thread Visibility",
+        "category": "MarkdownComments"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "markdownComments.reply",
+          "when": "false"
+        },
+        {
+          "command": "markdownComments.resolve",
+          "when": "false"
+        },
+        {
+          "command": "markdownComments.reopen",
+          "when": "false"
+        },
+        {
+          "command": "markdownComments.editComment",
+          "when": "false"
+        },
+        {
+          "command": "markdownComments.saveComment",
+          "when": "false"
+        },
+        {
+          "command": "markdownComments.cancelEdit",
+          "when": "false"
+        },
+        {
+          "command": "markdownComments.deleteComment",
+          "when": "false"
+        },
+        {
+          "command": "markdownComments.deleteThread",
+          "when": "false"
+        }
+      ],
+      "comments/commentThread/title": [
+        {
+          "command": "markdownComments.resolve",
+          "group": "inline@1",
+          "when": "commentController == markdownComments && commentThreadIsResolved == false"
+        },
+        {
+          "command": "markdownComments.reopen",
+          "group": "inline@1",
+          "when": "commentController == markdownComments && commentThreadIsResolved == true"
+        },
+        {
+          "command": "markdownComments.deleteThread",
+          "group": "inline@2",
+          "when": "commentController == markdownComments"
+        }
+      ],
+      "comments/commentThread/context": [
+        {
+          "command": "markdownComments.reply",
+          "group": "inline@1",
+          "when": "commentController == markdownComments"
+        }
+      ],
+      "comments/comment/title": [
+        {
+          "command": "markdownComments.editComment",
+          "group": "group@1",
+          "when": "commentController == markdownComments && comment == canEdit"
+        },
+        {
+          "command": "markdownComments.deleteComment",
+          "group": "group@2",
+          "when": "commentController == markdownComments && comment == canEdit"
+        }
+      ],
+      "comments/comment/context": [
+        {
+          "command": "markdownComments.saveComment",
+          "group": "inline@1",
+          "when": "commentController == markdownComments && comment == canEdit"
+        },
+        {
+          "command": "markdownComments.cancelEdit",
+          "group": "inline@2",
+          "when": "commentController == markdownComments && comment == canEdit"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "markdownComments.addComment",
+          "group": "1_modification",
+          "when": "editorLangId == markdown && editorHasSelection"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "markdownComments.addComment",
+        "key": "ctrl+alt+m",
+        "mac": "cmd+alt+m",
+        "when": "editorLangId == markdown"
+      }
+    ]
+  },
+  "scripts": {
+    "compile": "tsc -p ./ --noEmit && node esbuild.js",
+    "watch": "node esbuild.js --watch",
+    "build": "node esbuild.js --production",
+    "lint": "tsc -p ./ --noEmit",
+    "test:unit": "mocha \"test/unit/**/*.test.js\"",
+    "pretest:integration": "npm run build",
+    "test:integration": "node test/runTest.js",
+    "test": "npm run test:unit",
+    "package": "vsce package --no-dependencies"
+  },
+  "devDependencies": {
+    "@types/markdown-it": "^14.1.1",
+    "@types/mocha": "^10.0.6",
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/test-electron": "^2.3.9",
+    "esbuild": "^0.21.5",
+    "mocha": "^10.4.0",
+    "typescript": "^5.4.5"
+  }
+}
