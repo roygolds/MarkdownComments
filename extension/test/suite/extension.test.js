@@ -366,6 +366,175 @@ describe("MarkdownComments extension", () => {
     assert.ok(html.includes('data-comment-index="0"'), "first comment index");
     assert.ok(html.includes('data-comment-index="1"'), "second comment index");
   });
+
+  it("contributes the comments sidebar view", () => {
+    const ext = vscode.extensions.getExtension(EXT_ID);
+    const contributes = ext.packageJSON.contributes;
+    const containers = contributes.viewsContainers.activitybar;
+    assert.ok(
+      containers.some((c) => c.id === "markdownComments"),
+      "activity-bar container contributed"
+    );
+    const views = contributes.views.markdownComments;
+    assert.ok(views, "views registered under the markdownComments container");
+    const view = views.find((v) => v.id === "markdownComments.sidebar");
+    assert.ok(view, "sidebar view contributed");
+    assert.strictEqual(view.type, "webview", "sidebar is a webview view");
+  });
+
+  it("exposes renderDocumentComments that renders only interactive cards", async () => {
+    const ext = vscode.extensions.getExtension(EXT_ID);
+    const api = await ext.activate();
+    assert.strictEqual(typeof api.renderDocumentComments, "function");
+    const src =
+      "# Title\n\n" +
+      "```MarkdownComments\n" +
+      "- id: mc-001\n" +
+      "  comments:\n" +
+      "    - by: A\n" +
+      '      at: "2026-06-05T08:03:51Z"\n' +
+      "      text: hello\n" +
+      "```\nBody paragraph.\n";
+    const html = api.renderDocumentComments(src);
+    assert.ok(html.includes('data-thread-id="mc-001"'), "thread card rendered");
+    assert.ok(html.includes('data-action="reply"'), "interactive reply action present");
+    assert.ok(!html.includes("markdown-comments__label"), "no per-fence label in sidebar");
+    assert.ok(!html.includes("Body paragraph."), "markdown body not rendered in sidebar");
+  });
+
+  it("renders an empty-state message when a document has no comments", async () => {
+    const ext = vscode.extensions.getExtension(EXT_ID);
+    const api = await ext.activate();
+    const html = api.renderDocumentComments("# Just a heading\n\nNo comments here.\n");
+    assert.ok(html.includes("mdc-sidebar__empty"), "empty-state element present");
+    assert.ok(html.includes("No comments"), "empty-state message present");
+  });
+
+  it("HTML-escapes hostile content in sidebar cards", async () => {
+    const ext = vscode.extensions.getExtension(EXT_ID);
+    const api = await ext.activate();
+    const src =
+      "```MarkdownComments\n" +
+      '- id: "mc-001"\n' +
+      '  comments:\n' +
+      '    - by: "<b>evil</b>"\n' +
+      '      at: "2026-06-05T08:03:51Z"\n' +
+      '      text: "<script>alert(1)</script>"\n' +
+      "```\nParagraph.\n";
+    const html = api.renderDocumentComments(src);
+    assert.ok(!html.includes("<script>alert(1)</script>"), "raw <script> must not appear");
+    assert.ok(!html.includes("<b>evil</b>"), "raw author markup must not appear");
+  });
+
+  it("sidebar renders an invalid fence as escaped raw text, never dropped", async () => {
+    const ext = vscode.extensions.getExtension(EXT_ID);
+    const api = await ext.activate();
+    const src =
+      "```MarkdownComments\n: not: valid: <script>x</script>\n```\nParagraph.\n";
+    const html = api.renderDocumentComments(src);
+    assert.ok(html.includes("markdown-comments--invalid"), "invalid block rendered");
+    assert.ok(!html.includes("<script>x</script>"), "raw payload escaped");
+    assert.ok(html.includes("&lt;script&gt;x&lt;/script&gt;"), "payload text preserved, escaped");
+  });
+
+  it("sidebar renders resolved threads with a resolved badge and Reopen, not Resolve", async () => {
+    const ext = vscode.extensions.getExtension(EXT_ID);
+    const api = await ext.activate();
+    const src =
+      "```MarkdownComments\n" +
+      "- id: mc-001\n" +
+      "  status: resolved\n" +
+      "  comments:\n" +
+      "    - by: A\n" +
+      '      at: "2026-06-05T08:03:51Z"\n' +
+      "      text: done\n" +
+      "```\nParagraph.\n";
+    const html = api.renderDocumentComments(src);
+    assert.ok(html.includes('data-status="resolved"'), "thread marked resolved");
+    assert.ok(html.includes("mdc-badge--resolved"), "resolved badge present");
+    assert.ok(html.includes('data-action="reopen"'), "reopen action present");
+    assert.ok(!html.includes('data-action="resolve"'), "resolve action absent when resolved");
+  });
+
+  it("sidebar renders every fence in a multi-fence document with no per-fence label", async () => {
+    const ext = vscode.extensions.getExtension(EXT_ID);
+    const api = await ext.activate();
+    const src =
+      "```MarkdownComments\n" +
+      "- id: mc-001\n" +
+      "  comments:\n" +
+      "    - by: A\n" +
+      '      at: "2026-06-05T08:03:51Z"\n' +
+      "      text: first\n" +
+      "```\nFirst paragraph.\n\n" +
+      "```MarkdownComments\n" +
+      "- id: mc-002\n" +
+      "  comments:\n" +
+      "    - by: B\n" +
+      '      at: "2026-06-05T08:04:00Z"\n' +
+      "      text: second\n" +
+      "```\nSecond paragraph.\n";
+    const html = api.renderDocumentComments(src);
+    assert.ok(html.includes('data-thread-id="mc-001"'), "first fence rendered");
+    assert.ok(html.includes('data-thread-id="mc-002"'), "second fence rendered");
+    assert.ok(!html.includes("markdown-comments__label"), "no per-fence label in sidebar");
+  });
+
+  it("sidebar assigns per-comment indices across a multi-comment thread", async () => {
+    const ext = vscode.extensions.getExtension(EXT_ID);
+    const api = await ext.activate();
+    const src =
+      "```MarkdownComments\n" +
+      "- id: mc-001\n" +
+      "  comments:\n" +
+      "    - by: A\n" +
+      '      at: "2026-06-05T08:03:51Z"\n' +
+      "      text: one\n" +
+      "    - by: B\n" +
+      '      at: "2026-06-05T08:04:00Z"\n' +
+      "      text: two\n" +
+      "```\nParagraph.\n";
+    const html = api.renderDocumentComments(src);
+    assert.ok(html.includes('data-comment-index="0"'), "first comment index");
+    assert.ok(html.includes('data-comment-index="1"'), "second comment index");
+  });
+
+  it("sidebar renderDocumentComments preserves CRLF documents", async () => {
+    const ext = vscode.extensions.getExtension(EXT_ID);
+    const api = await ext.activate();
+    const lf =
+      "```MarkdownComments\n" +
+      "- id: mc-001\n" +
+      "  comments:\n" +
+      "    - by: A\n" +
+      '      at: "2026-06-05T08:03:51Z"\n' +
+      "      text: hello\n" +
+      "```\nParagraph.\n";
+    const crlf = lf.replace(/\n/g, "\r\n");
+    const html = api.renderDocumentComments(crlf);
+    assert.ok(html.includes('data-thread-id="mc-001"'), "thread rendered for CRLF doc");
+    assert.ok(html.includes('data-action="reply"'), "interactive actions rendered for CRLF doc");
+  });
+
+  it("selectSidebarBody returns the three provider states", async () => {
+    const ext = vscode.extensions.getExtension(EXT_ID);
+    const api = await ext.activate();
+    assert.strictEqual(typeof api.selectSidebarBody, "function");
+
+    const noTarget = api.selectSidebarBody(false, undefined);
+    assert.ok(noTarget.includes("mdc-sidebar__empty"), "no-target is an empty state");
+    assert.ok(noTarget.includes("Open a Markdown file"), "no-target message");
+
+    const noDoc = api.selectSidebarBody(true, undefined);
+    assert.ok(noDoc.includes("mdc-sidebar__empty"), "no-document is an empty state");
+    assert.ok(noDoc.includes("Open the document in an editor"), "no-document message");
+
+    const withDoc = api.selectSidebarBody(
+      true,
+      "```MarkdownComments\n- id: mc-001\n  comments:\n    - by: A\n      at: \"2026-06-05T08:03:51Z\"\n      text: hi\n```\nP.\n"
+    );
+    assert.ok(withDoc.includes('data-thread-id="mc-001"'), "with-document renders cards");
+  });
 });
 
 // Apply a core EditResult's text edits to a string (offsets from LSP positions,

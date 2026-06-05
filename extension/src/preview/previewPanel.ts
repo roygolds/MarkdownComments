@@ -20,17 +20,8 @@
 import * as vscode from "vscode";
 import { randomBytes } from "crypto";
 import MarkdownIt from "markdown-it";
-import { core } from "../core/wasmBridge";
 import { applyMarkdownCommentsPlugin } from "./markdownItPlugin";
-import { applyEditResult } from "../comments/edits";
-import { resolveAuthor, nowUtc } from "../model/identity";
-import {
-  Inbound,
-  validateInboundMessage,
-  evaluateLiveGuard,
-  computeEdit,
-  needsIdentity
-} from "./messageValidation";
+import { CommentEditController } from "./commentEditController";
 
 export class CommentsPreviewPanel {
   private static current: CommentsPreviewPanel | undefined;
@@ -63,7 +54,7 @@ export class CommentsPreviewPanel {
   private readonly md: MarkdownIt;
   private readonly disposables: vscode.Disposable[] = [];
   private readonly uri: vscode.Uri;
-  private applying = false;
+  private readonly editController: CommentEditController;
   private renderTimer: ReturnType<typeof setTimeout> | undefined;
 
   private constructor(
@@ -74,11 +65,16 @@ export class CommentsPreviewPanel {
     this.uri = document.uri;
     this.md = new MarkdownIt({ html: false, linkify: false, breaks: false });
     applyMarkdownCommentsPlugin(this.md, { interactive: true });
+    this.editController = new CommentEditController(
+      () => this.uri,
+      () => this.findDocument(),
+      () => this.render()
+    );
 
     this.panel.onDidDispose(() => this.dispose(), null, this.disposables);
 
     this.panel.webview.onDidReceiveMessage(
-      (msg) => void this.onMessage(msg),
+      (msg) => void this.editController.handle(msg),
       null,
       this.disposables
     );
@@ -193,88 +189,6 @@ ${p.bodyHtml}
   <script nonce="${p.nonce}" src="${p.scriptUri}"></script>
 </body>
 </html>`;
-  }
-
-  private async onMessage(raw: unknown): Promise<void> {
-    const msg = validateInboundMessage(raw);
-    if (!msg) {
-      return;
-    }
-    if (this.applying) {
-      void vscode.window.showInformationMessage(
-        "MarkdownComments: please wait for the previous change to finish."
-      );
-      return;
-    }
-
-    this.applying = true;
-    try {
-      await this.dispatch(msg);
-    } finally {
-      this.applying = false;
-    }
-  }
-
-  /**
-   * Return the live document only if it is still the panel's target, is open in
-   * an editor, and is at exactly the version the message was composed against.
-   * Otherwise warn, refresh the preview, and return undefined. This is called
-   * again after every `await` so a concurrent external edit cannot make a
-   * positional edit land on the wrong range.
-   */
-  private liveDocument(msg: Inbound): vscode.TextDocument | undefined {
-    const document = this.findDocument();
-    const decision = evaluateLiveGuard({
-      msgUri: msg.uri,
-      panelUri: this.uri.toString(),
-      doc: document,
-      msgVersion: msg.docVersion
-    });
-    switch (decision) {
-      case "wrongUri":
-        this.render();
-        return undefined;
-      case "noDocument":
-        void vscode.window.showWarningMessage(
-          "MarkdownComments: open the document in an editor to edit its comments."
-        );
-        return undefined;
-      case "staleVersion":
-        void vscode.window.showWarningMessage(
-          "MarkdownComments: preview was out of date and has been refreshed. Please retry."
-        );
-        this.render();
-        return undefined;
-      case "ok":
-        return document;
-    }
-  }
-
-  private async dispatch(msg: Inbound): Promise<void> {
-    // Resolve identity / confirmation BEFORE the final version guard, then
-    // re-check the document so a concurrent external edit cannot slip in during
-    // these awaits.
-    let identity: { by?: string; at?: string } = {};
-    if (needsIdentity(msg.type)) {
-      identity = { by: await resolveAuthor(this.uri), at: nowUtc() };
-    }
-    if (msg.type === "deleteThread") {
-      const confirmed = await vscode.window.showWarningMessage(
-        `Delete comment thread "${msg.threadId}" and all of its replies?`,
-        { modal: true },
-        "Delete"
-      );
-      if (confirmed !== "Delete") {
-        return;
-      }
-    }
-
-    const document = this.liveDocument(msg);
-    if (!document) {
-      return;
-    }
-    const result = computeEdit(core, document.getText(), msg, identity);
-    await applyEditResult(document.uri, result);
   }
 
   private dispose(): void {

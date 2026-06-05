@@ -23,6 +23,8 @@ export function escapeHtml(s: string): string {
 export interface RenderOptions {
   /** When true, emit action buttons (reply/edit/resolve/delete) for the panel. */
   interactive: boolean;
+  /** When false, omit the per-fence "Comments" label (used by the sidebar). */
+  label?: boolean;
 }
 
 /** Render the threads of one fence into a comment-card container. */
@@ -35,12 +37,11 @@ export function renderThreadsHtml(
     return invalidBlock(rawPayload);
   }
   const cards = threads.map((t) => renderThread(t, opts)).join("");
-  return (
-    '<div class="markdown-comments" data-mdc="root">' +
-    '<div class="markdown-comments__label">\u{1F4AC} Comments</div>' +
-    cards +
-    "</div>"
-  );
+  const label =
+    opts.label === false
+      ? ""
+      : '<div class="markdown-comments__label">\u{1F4AC} Comments</div>';
+  return '<div class="markdown-comments" data-mdc="root">' + label + cards + "</div>";
 }
 
 function renderThread(t: ThreadView, opts: RenderOptions): string {

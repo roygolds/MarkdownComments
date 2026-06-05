@@ -14,17 +14,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   title bar). The panel renders the Markdown alongside comment cards and lets
   you reply, edit, resolve, reopen, and delete comments directly from the
   preview, applying changes back to the document.
-- Hide and collapse controls for comments in both the new panel and VS Code's
-  built-in Markdown preview: hide all comments, collapse all comment bodies,
-  hide resolved threads, and collapse individual threads.
+- **Comments sidebar** (activity-bar view "Markdown Comments") that shows only
+  the comment threads for the active Markdown file — Word-style side comments —
+  with the same reply/edit/resolve/reopen/delete actions. It follows the active
+  Markdown editor and updates live as the document changes.
+- Hide and collapse controls for comments in the panel, the sidebar, and
+  VS Code's built-in Markdown preview: hide all comments, collapse all comment
+  bodies, hide resolved threads, and collapse individual threads.
 
 ### Security
 
-- The preview panel renders Markdown with `html:false` and a strict
+- The preview panel and sidebar render Markdown with `html:false` and a strict
   Content-Security-Policy (nonce-gated scripts, no inline/eval). All
   document-derived content is HTML-escaped and never passed into JavaScript;
-  inbound webview messages are validated and guarded by a document-version
-  check before any edit is applied.
+  inbound webview messages are validated and guarded by a uri + document-version
+  check (re-checked after every async step) before any edit is applied.
 
 ## [0.1.0] - 2026-06-05
 

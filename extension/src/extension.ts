@@ -5,6 +5,8 @@ import * as vscode from "vscode";
 import { CommentManager, MarkdownComment } from "./comments/commentController";
 import { extendMarkdownIt, applyMarkdownCommentsPlugin } from "./preview/markdownItPlugin";
 import { CommentsPreviewPanel } from "./preview/previewPanel";
+import { CommentsSidebarProvider } from "./preview/commentsSidebar";
+import { renderDocumentComments, selectSidebarBody } from "./preview/documentCards";
 import {
   validateInboundMessage,
   evaluateLiveGuard,
@@ -18,6 +20,8 @@ export function activate(context: vscode.ExtensionContext): {
   validateInboundMessage: typeof validateInboundMessage;
   evaluateLiveGuard: typeof evaluateLiveGuard;
   computeEdit: typeof computeEdit;
+  renderDocumentComments: typeof renderDocumentComments;
+  selectSidebarBody: typeof selectSidebarBody;
 } {
   const manager = new CommentManager();
   context.subscriptions.push(manager);
@@ -47,6 +51,15 @@ export function activate(context: vscode.ExtensionContext): {
     CommentsPreviewPanel.createOrShow(context.extensionUri, editor.document);
   });
 
+  const sidebarProvider = new CommentsSidebarProvider(context.extensionUri);
+  context.subscriptions.push(
+    sidebarProvider,
+    vscode.window.registerWebviewViewProvider(
+      CommentsSidebarProvider.viewType,
+      sidebarProvider
+    )
+  );
+
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration((e) => {
       if (e.affectsConfiguration("markdownComments.authorName")) {
@@ -60,7 +73,9 @@ export function activate(context: vscode.ExtensionContext): {
     applyMarkdownCommentsPlugin,
     validateInboundMessage,
     evaluateLiveGuard,
-    computeEdit
+    computeEdit,
+    renderDocumentComments,
+    selectSidebarBody
   };
 }
 

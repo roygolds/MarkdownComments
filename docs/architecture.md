@@ -11,6 +11,7 @@ Use a local-first VS Code extension with Markdown files as the primary content a
 - Markdown writer: make minimal text edits that preserve readable source and never silently merge duplicate IDs or Git conflicts. Stored timestamps are UTC with a `Z` suffix.
 - Preview renderer: hide comment fences and render safe pins, cards, or highlights near the attached block or quote.
 - Interactive comments preview panel: a dedicated webview (separate from VS Code's built-in Markdown preview) that renders the document plus interactive comment cards and lets the user reply, edit, resolve, reopen, delete, hide, and collapse comments. It is required because the built-in Markdown preview exposes no supported channel to write edits back to the extension; built-in preview support is therefore limited to read-only cards plus hide/collapse affordances.
+- Comments sidebar: an activity-bar `WebviewView` that shows only the active Markdown document's comment threads as Word-style side cards (no Markdown body) and offers the same reply/edit/resolve/reopen/delete actions plus collapse-all and hide-resolved toggles. Unlike the panel (pinned to one document), the sidebar follows the active Markdown editor and re-renders live (debounced) on document changes. It shares the panel's webview script, styles, security posture, and the common `CommentEditController` that validates and applies inbound edits.
 
 ## Domain model
 
@@ -67,9 +68,9 @@ Inline fenced blocks are the selected first-release storage model.
 
 ### Preview panel webview hardening
 
-- The interactive preview panel renders Markdown with `html: false` and a strict Content-Security-Policy: `default-src 'none'`, nonce-gated `script-src` (no `unsafe-inline`/`eval`), and `localResourceRoots` scoped to the extension's `media/` folder. The nonce is generated with a cryptographic RNG.
+- The interactive preview panel and the comments sidebar render Markdown with `html: false` and a strict Content-Security-Policy: `default-src 'none'`, nonce-gated `script-src` (no `unsafe-inline`/`eval`), and `localResourceRoots` scoped to the extension's `media/` folder. The nonce is generated with a cryptographic RNG.
 - All document-derived content (comment text, author, timestamp, thread id, quote, and any invalid raw payload) is HTML-escaped before being placed in element text or attributes, and is never interpolated into JavaScript. The webview script only reads `data-` attributes and element text and assigns user input to `textarea.value`.
-- Every inbound webview message is validated as hostile (known type, bounded string lengths, integer indices) and guarded by both the document `uri` and `docVersion`; the version is re-checked after every `await` so a concurrent external edit cannot make a positional edit land on the wrong range. Operations are serialized and `deleteThread` requires a modal confirmation. The Rust/WASM core remains the authority and rejects ambiguous edits.
+- Every inbound webview message is validated as hostile (known type, bounded string lengths, integer indices) and guarded by both the document `uri` and `docVersion`; the version is re-checked after every `await` so a concurrent external edit cannot make a positional edit land on the wrong range. The `uri` is checked against the surface's *current* target, so a message composed before the sidebar follows a new editor is rejected rather than applied to the wrong document. Operations are serialized and `deleteThread` requires a modal confirmation. The Rust/WASM core remains the authority and rejects ambiguous edits.
 - Accepted residuals: the panel allows remote (`https:`/`data:`) images in the rendered Markdown body, matching VS Code's own preview behavior (a malicious document could beacon on open); and raw HTML elsewhere in the document may still render in VS Code's **built-in** preview, which controls its own markdown-it `html` setting — the extension's comment cards remain escaped regardless.
 
 ### Parser hardening

@@ -14,6 +14,16 @@ body {
   color: var(--vscode-descriptionForeground);
 }
 
+.mdc-sidebar__empty {
+  color: var(--vscode-descriptionForeground);
+  padding: 8px 0;
+}
+
+/* The sidebar webview is narrow; tighten the page padding there. */
+body.mdc-sidebar {
+  padding: 0 10px 16px;
+}
+
 /* Toolbar ----------------------------------------------------------------- */
 .mdc-toolbar {
   position: sticky;

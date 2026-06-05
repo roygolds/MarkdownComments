@@ -21,9 +21,13 @@ diff cleanly in Git.
 - **Interactive Comments Preview panel**: run *MarkdownComments: Open Comments
   Preview* (or use the editor title button) to reply, edit, resolve, reopen, and
   delete comments directly from a side-by-side preview.
+- **Comments sidebar**: an activity-bar view (Markdown Comments) shows just the
+  comment threads for the active Markdown file — Word-style side comments — with
+  the same reply/edit/resolve/reopen/delete actions. It follows whichever
+  Markdown file you focus and updates live as you edit.
 - **Hide & collapse controls**: hide all comments, collapse comment bodies, hide
-  resolved threads, or collapse individual threads — in both the panel and the
-  built-in Markdown preview.
+  resolved threads, or collapse individual threads — in the panel, the sidebar,
+  and the built-in Markdown preview.
 
 ## How it works
 

@@ -21,6 +21,25 @@
   "main": "./dist/extension.js",
   "contributes": {
     "markdown.markdownItPlugins": true,
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "markdownComments",
+          "title": "Markdown Comments",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "markdownComments": [
+        {
+          "type": "webview",
+          "id": "markdownComments.sidebar",
+          "name": "Comments",
+          "contextualTitle": "Markdown Comments"
+        }
+      ]
+    },
     "markdown.previewScripts": [
       "./media/preview.js"
     ],
