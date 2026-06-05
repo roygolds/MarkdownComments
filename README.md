@@ -18,12 +18,13 @@ MarkdownComments is a project for adding collaborative commenting features to Ma
 | `.github\copilot-instructions.md` | Copilot-specific repository guidance. |
 | `docs\product-brief.md` | Product goals, users, workflows, and open questions. |
 | `docs\architecture.md` | Initial architecture notes and technical direction. |
+| `docs\format.md` | Approved inline `MarkdownComments` fenced-block format. |
 | `docs\squad.md` | Human-readable squad roster and collaboration model. |
 | `squad\agents.yml` | Machine-readable squad definition. |
 
 ## Initial product direction
 
-The first implementation should prove that Markdown comments can be stored separately from the document body, anchored to meaningful text ranges, rendered in an editor-like UI, and synchronized safely with normal Git-based Markdown editing.
+The first implementation should prove that inline `MarkdownComments` fenced YAML blocks can support review threads in a VS Code extension, render cleanly in Markdown Preview, and synchronize safely with normal Git-based Markdown editing.
 
 ## AI collaboration
 
