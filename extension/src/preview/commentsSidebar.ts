@@ -13,6 +13,9 @@ import * as vscode from "vscode";
 import { randomBytes } from "crypto";
 import { selectSidebarBody } from "./documentCards";
 import { CommentEditController } from "./commentEditController";
+import { parseRevealMessage, revealThread } from "./revealThread";
+import { setSidebarVisible } from "./previewState";
+import { onDidChangeActivePreview, CommentsPreviewPanel } from "./previewPanel";
 
 export class CommentsSidebarProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = "markdownComments.sidebar";
@@ -32,7 +35,12 @@ export class CommentsSidebarProvider implements vscode.WebviewViewProvider {
     );
 
     this.disposables.push(
-      vscode.window.onDidChangeActiveTextEditor((editor) => this.onActiveEditor(editor)),
+      vscode.window.onDidChangeActiveTextEditor(() => this.recomputeTarget()),
+      // Focusing a webview tab (our preview panel or the built-in preview) does
+      // not fire onDidChangeActiveTextEditor, so also react to tab changes and
+      // to the preview panel's focus so the sidebar follows what the user views.
+      onDidChangeActivePreview(() => this.recomputeTarget()),
+      vscode.window.tabGroups.onDidChangeTabs(() => this.recomputeTarget()),
       vscode.workspace.onDidChangeTextDocument((e) => {
         if (this.targetUri && e.document.uri.toString() === this.targetUri.toString()) {
           this.scheduleRender();
@@ -56,28 +64,71 @@ export class CommentsSidebarProvider implements vscode.WebviewViewProvider {
     // can run again after the view is hidden and re-shown; dispose the previous
     // listener so handlers don't accumulate across show/hide cycles.
     this.viewListener?.dispose();
-    this.viewListener = webviewView.webview.onDidReceiveMessage(
-      (msg) => void this.editController.handle(msg)
+    this.viewListener = webviewView.webview.onDidReceiveMessage((msg) => {
+      const reveal = parseRevealMessage(msg);
+      if (reveal) {
+        // Only navigate when the click came from the document the sidebar is
+        // currently showing; a stale click from a previous target is ignored.
+        if (this.targetUri && reveal.uri === this.targetUri.toString()) {
+          void revealThread(this.targetUri, reveal.threadId);
+        }
+        return;
+      }
+      void this.editController.handle(msg);
+    });
+
+    setSidebarVisible(webviewView.visible);
+    this.disposables.push(
+      webviewView.onDidChangeVisibility(() => this.onVisibilityChanged(webviewView.visible))
     );
+
     webviewView.onDidDispose(() => {
       this.viewListener?.dispose();
       this.viewListener = undefined;
       this.view = undefined;
+      setSidebarVisible(false);
+      void refreshBuiltInPreview();
     });
     // Adopt whatever Markdown document is active when the view opens.
-    this.onActiveEditor(vscode.window.activeTextEditor);
+    this.recomputeTarget();
     this.render();
+    void refreshBuiltInPreview();
   }
 
-  private onActiveEditor(editor: vscode.TextEditor | undefined): void {
-    if (editor && editor.document.languageId === "markdown") {
-      if (!this.targetUri || this.targetUri.toString() !== editor.document.uri.toString()) {
-        this.targetUri = editor.document.uri;
-        this.render();
-      }
+  private onVisibilityChanged(visible: boolean): void {
+    setSidebarVisible(visible);
+    if (visible) {
+      this.recomputeTarget();
+      this.render();
     }
-    // When a non-Markdown editor becomes active, keep showing the last Markdown
-    // document's comments rather than clearing the sidebar.
+    // Re-render the built-in preview so its inline comment cards appear/disappear
+    // in step with the sidebar.
+    void refreshBuiltInPreview();
+  }
+
+  /**
+   * Point the sidebar at the document the user is currently looking at: the
+   * active Markdown editor, or — when a webview tab is focused — the source of
+   * our interactive preview panel. Otherwise keep the last target rather than
+   * clearing, so switching to a non-Markdown tab doesn't blank the sidebar.
+   */
+  private recomputeTarget(): void {
+    const editor = vscode.window.activeTextEditor;
+    if (editor && editor.document.languageId === "markdown") {
+      this.setTarget(editor.document.uri);
+      return;
+    }
+    const previewUri = CommentsPreviewPanel.activeSourceUri();
+    if (previewUri) {
+      this.setTarget(previewUri);
+    }
+  }
+
+  private setTarget(uri: vscode.Uri): void {
+    if (!this.targetUri || this.targetUri.toString() !== uri.toString()) {
+      this.targetUri = uri;
+      this.render();
+    }
   }
 
   private findDocument(): vscode.TextDocument | undefined {
@@ -155,9 +206,33 @@ ${bodyHtml}
     }
     this.viewListener?.dispose();
     this.viewListener = undefined;
+    setSidebarVisible(false);
     while (this.disposables.length) {
       this.disposables.pop()?.dispose();
     }
+  }
+}
+
+let reloadPluginsAvailable: boolean | undefined;
+
+/**
+ * Best-effort re-render of VS Code's built-in Markdown preview so its inline
+ * comment cards reflect the current sidebar visibility. `markdown.api.reloadPlugins`
+ * re-runs contributed markdown-it plugins (including ours) and refreshes open
+ * previews. If the command is unavailable the preview still updates on the next
+ * document change, so failures are swallowed.
+ */
+async function refreshBuiltInPreview(): Promise<void> {
+  try {
+    if (reloadPluginsAvailable === undefined || reloadPluginsAvailable === false) {
+      const commands = await vscode.commands.getCommands(true);
+      reloadPluginsAvailable = commands.includes("markdown.api.reloadPlugins");
+    }
+    if (reloadPluginsAvailable) {
+      await vscode.commands.executeCommand("markdown.api.reloadPlugins");
+    }
+  } catch {
+    /* best effort */
   }
 }
 

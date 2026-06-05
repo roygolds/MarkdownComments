@@ -188,6 +188,7 @@ body.mdc-sidebar {
 .mdc-comment__text {
   white-space: pre-wrap;
   margin-top: 2px;
+  cursor: pointer;
 }
 
 .mdc-reply {

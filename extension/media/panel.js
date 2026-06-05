@@ -226,6 +226,21 @@
     }
     const btn = target.closest("[data-action]");
     if (!btn) {
+      // A click elsewhere on a comment thread (not a button, not inside an open
+      // editor) reveals the anchored line in the Markdown document. Ignore the
+      // click when the user is selecting text so copying never navigates away.
+      if (target.closest(".mdc-editor")) {
+        return;
+      }
+      const selection = window.getSelection && window.getSelection();
+      if (selection && String(selection).length > 0) {
+        return;
+      }
+      const thread = target.closest(".mdc-thread");
+      const id = thread && thread.getAttribute("data-thread-id");
+      if (id) {
+        post({ type: "reveal", threadId: id });
+      }
       return;
     }
     const action = btn.getAttribute("data-action");

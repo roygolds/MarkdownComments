@@ -22,9 +22,25 @@ import { randomBytes } from "crypto";
 import MarkdownIt from "markdown-it";
 import { applyMarkdownCommentsPlugin } from "./markdownItPlugin";
 import { CommentEditController } from "./commentEditController";
+import { parseRevealMessage, revealThread } from "./revealThread";
+
+const activePreviewChanged = new vscode.EventEmitter<void>();
+
+/**
+ * Fires whenever the interactive Comments Preview panel gains or loses focus, or
+ * is created/disposed. The sidebar uses this to follow the panel's source
+ * document when the panel tab (a webview, not a text editor) is focused.
+ */
+export const onDidChangeActivePreview = activePreviewChanged.event;
 
 export class CommentsPreviewPanel {
   private static current: CommentsPreviewPanel | undefined;
+
+  /** The source document uri of the panel when its tab is currently focused. */
+  static activeSourceUri(): vscode.Uri | undefined {
+    const c = CommentsPreviewPanel.current;
+    return c && c.active ? c.uri : undefined;
+  }
 
   static createOrShow(extensionUri: vscode.Uri, document: vscode.TextDocument): void {
     const column = vscode.ViewColumn.Beside;
@@ -56,6 +72,7 @@ export class CommentsPreviewPanel {
   private readonly uri: vscode.Uri;
   private readonly editController: CommentEditController;
   private renderTimer: ReturnType<typeof setTimeout> | undefined;
+  private active: boolean;
 
   private constructor(
     private readonly panel: vscode.WebviewPanel,
@@ -63,6 +80,7 @@ export class CommentsPreviewPanel {
     document: vscode.TextDocument
   ) {
     this.uri = document.uri;
+    this.active = panel.active;
     this.md = new MarkdownIt({ html: false, linkify: false, breaks: false });
     applyMarkdownCommentsPlugin(this.md, { interactive: true });
     this.editController = new CommentEditController(
@@ -73,8 +91,26 @@ export class CommentsPreviewPanel {
 
     this.panel.onDidDispose(() => this.dispose(), null, this.disposables);
 
+    this.panel.onDidChangeViewState(
+      (e) => {
+        this.active = e.webviewPanel.active;
+        activePreviewChanged.fire();
+      },
+      null,
+      this.disposables
+    );
+
     this.panel.webview.onDidReceiveMessage(
-      (msg) => void this.editController.handle(msg),
+      (msg) => {
+        const reveal = parseRevealMessage(msg);
+        if (reveal) {
+          if (reveal.uri === this.uri.toString()) {
+            void revealThread(this.uri, reveal.threadId);
+          }
+          return;
+        }
+        void this.editController.handle(msg);
+      },
       null,
       this.disposables
     );
@@ -193,6 +229,7 @@ ${p.bodyHtml}
 
   private dispose(): void {
     CommentsPreviewPanel.current = undefined;
+    this.active = false;
     if (this.renderTimer) {
       clearTimeout(this.renderTimer);
     }
@@ -200,6 +237,7 @@ ${p.bodyHtml}
       this.disposables.pop()?.dispose();
     }
     this.panel.dispose();
+    activePreviewChanged.fire();
   }
 }
 

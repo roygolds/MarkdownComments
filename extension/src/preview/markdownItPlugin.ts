@@ -11,6 +11,7 @@ import type MarkdownIt from "markdown-it";
 import { core } from "../core/wasmBridge";
 import type { ThreadView } from "../core/types";
 import { renderThreadsHtml } from "./cardRender";
+import { isSidebarVisible } from "./previewState";
 
 const INFO = "MarkdownComments";
 
@@ -37,6 +38,12 @@ export function applyMarkdownCommentsPlugin(md: MarkdownIt, options: PluginOptio
   md.renderer.rules.fence = (tokens, idx, opts, env, self) => {
     const token = tokens[idx];
     if (token.info.trim() === INFO) {
+      // In the read-only built-in preview, suppress the inline comment cards
+      // while the Word-style sidebar is visible so comments aren't duplicated.
+      // The interactive panel (interactive: true) always keeps its cards.
+      if (!options.interactive && isSidebarVisible()) {
+        return "";
+      }
       const threads = parseFencePayload(token.content);
       return renderThreadsHtml(threads, token.content, options);
     }

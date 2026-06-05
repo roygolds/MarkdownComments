@@ -535,6 +535,90 @@ describe("MarkdownComments extension", () => {
     );
     assert.ok(withDoc.includes('data-thread-id="mc-001"'), "with-document renders cards");
   });
+
+  it("findThreadRange resolves a thread's anchored block and rejects unknown ids", async () => {
+    const ext = vscode.extensions.getExtension(EXT_ID);
+    const api = await ext.activate();
+    assert.strictEqual(typeof api.findThreadRange, "function");
+    const src =
+      "```MarkdownComments\n" +
+      "- id: mc-001\n" +
+      "  comments:\n" +
+      "    - by: A\n" +
+      '      at: "2026-06-05T08:03:51Z"\n' +
+      "      text: hi\n" +
+      "```\n" +
+      "Anchored paragraph.\n";
+    const range = api.findThreadRange(src, "mc-001");
+    assert.ok(range, "range found for known thread");
+    assert.strictEqual(typeof range.start.line, "number", "range has a numeric start line");
+    // The anchored content is the paragraph that follows the 7-line fence.
+    assert.ok(range.start.line >= 6, "range points at or past the anchored block");
+    assert.strictEqual(api.findThreadRange(src, "mc-404"), undefined, "unknown id yields undefined");
+  });
+
+  it("parseRevealMessage accepts valid reveal messages and rejects hostile input", async () => {
+    const ext = vscode.extensions.getExtension(EXT_ID);
+    const api = await ext.activate();
+    assert.deepStrictEqual(
+      api.parseRevealMessage({ type: "reveal", threadId: "mc-001", uri: "file:///a.md" }),
+      { type: "reveal", threadId: "mc-001", uri: "file:///a.md" }
+    );
+    assert.strictEqual(
+      api.parseRevealMessage({ type: "reply", threadId: "mc-001", uri: "file:///a.md" }),
+      undefined
+    );
+    assert.strictEqual(api.parseRevealMessage({ type: "reveal", uri: "file:///a.md" }), undefined);
+    assert.strictEqual(api.parseRevealMessage({ type: "reveal", threadId: "mc-001" }), undefined);
+    assert.strictEqual(
+      api.parseRevealMessage({ type: "reveal", threadId: "", uri: "file:///a.md" }),
+      undefined
+    );
+    assert.strictEqual(
+      api.parseRevealMessage({ type: "reveal", threadId: "x".repeat(201), uri: "file:///a.md" }),
+      undefined
+    );
+    assert.strictEqual(api.parseRevealMessage(null), undefined);
+  });
+
+  it("built-in preview suppresses inline comment cards while the sidebar is visible", async () => {
+    const ext = vscode.extensions.getExtension(EXT_ID);
+    const api = await ext.activate();
+    const MarkdownIt = require("markdown-it");
+    const md = new MarkdownIt();
+    api.extendMarkdownIt(md);
+    const src =
+      "```MarkdownComments\n- id: mc-001\n  comments:\n    - by: A\n      at: \"2026-06-05T08:03:51Z\"\n      text: hi\n```\nParagraph.\n";
+    try {
+      assert.ok(md.render(src).includes('data-thread-id="mc-001"'), "cards shown when sidebar hidden");
+      api.setSidebarVisible(true);
+      assert.ok(api.isSidebarVisible(), "sidebar reported visible");
+      const hidden = md.render(src);
+      assert.ok(!hidden.includes('data-thread-id="mc-001"'), "cards hidden when sidebar visible");
+      assert.ok(hidden.includes("Paragraph."), "the anchored Markdown body still renders");
+    } finally {
+      api.setSidebarVisible(false);
+    }
+    assert.ok(md.render(src).includes('data-thread-id="mc-001"'), "cards return when sidebar hidden again");
+  });
+
+  it("interactive panel keeps comment cards even while the sidebar is visible", async () => {
+    const ext = vscode.extensions.getExtension(EXT_ID);
+    const api = await ext.activate();
+    const MarkdownIt = require("markdown-it");
+    const md = new MarkdownIt({ html: false });
+    api.applyMarkdownCommentsPlugin(md, { interactive: true });
+    const src =
+      "```MarkdownComments\n- id: mc-001\n  comments:\n    - by: A\n      at: \"2026-06-05T08:03:51Z\"\n      text: hi\n```\nParagraph.\n";
+    try {
+      api.setSidebarVisible(true);
+      const html = md.render(src);
+      assert.ok(html.includes('data-thread-id="mc-001"'), "panel still shows cards");
+      assert.ok(html.includes('data-action="reply"'), "panel stays interactive");
+    } finally {
+      api.setSidebarVisible(false);
+    }
+  });
 });
 
 // Apply a core EditResult's text edits to a string (offsets from LSP positions,

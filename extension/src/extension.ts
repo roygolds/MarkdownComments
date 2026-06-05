@@ -12,6 +12,8 @@ import {
   evaluateLiveGuard,
   computeEdit
 } from "./preview/messageValidation";
+import { findThreadRange, parseRevealMessage } from "./preview/revealThread";
+import { isSidebarVisible, setSidebarVisible } from "./preview/previewState";
 import { clearIdentityCache } from "./model/identity";
 
 export function activate(context: vscode.ExtensionContext): {
@@ -22,6 +24,10 @@ export function activate(context: vscode.ExtensionContext): {
   computeEdit: typeof computeEdit;
   renderDocumentComments: typeof renderDocumentComments;
   selectSidebarBody: typeof selectSidebarBody;
+  findThreadRange: typeof findThreadRange;
+  parseRevealMessage: typeof parseRevealMessage;
+  isSidebarVisible: typeof isSidebarVisible;
+  setSidebarVisible: typeof setSidebarVisible;
 } {
   const manager = new CommentManager();
   context.subscriptions.push(manager);
@@ -75,7 +81,11 @@ export function activate(context: vscode.ExtensionContext): {
     evaluateLiveGuard,
     computeEdit,
     renderDocumentComments,
-    selectSidebarBody
+    selectSidebarBody,
+    findThreadRange,
+    parseRevealMessage,
+    isSidebarVisible,
+    setSidebarVisible
   };
 }
 
