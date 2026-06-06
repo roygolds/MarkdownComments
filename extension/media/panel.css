@@ -85,6 +85,8 @@ body.mdc-sidebar {
 .mdc-thread {
   padding: 8px 10px;
   border-top: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.18));
+  cursor: pointer;
+  transition: background-color 0.12s ease, box-shadow 0.12s ease;
 }
 
 .mdc-thread:first-of-type {
@@ -164,6 +166,19 @@ body.mdc-sidebar {
   }
 }
 
+/* Hover affordance: the whole card is clickable to reveal its anchored line. */
+.mdc-thread:hover {
+  background-color: var(--vscode-list-hoverBackground, rgba(128, 128, 128, 0.12));
+}
+
+/* Selected card: a bolder border drawn with an inset box-shadow so the card
+   does not shift and it composes with the existing top-border separators. */
+.mdc-thread--selected {
+  background-color: var(--vscode-list-inactiveSelectionBackground, rgba(128, 128, 128, 0.16));
+  box-shadow: inset 0 0 0 2px var(--vscode-focusBorder, #007fd4);
+  border-radius: 4px;
+}
+
 .mdc-quote {
   font-style: italic;
   color: var(--vscode-descriptionForeground);
@@ -202,7 +217,7 @@ body.mdc-sidebar {
 .mdc-comment__text {
   white-space: pre-wrap;
   margin-top: 2px;
-  cursor: pointer;
+  cursor: text;
 }
 
 .mdc-reply {
@@ -255,6 +270,11 @@ body.mdc-sidebar {
 
 .mdc-editor {
   margin-top: 6px;
+}
+
+/* The card sets cursor:pointer; keep a text caret inside the editor field. */
+.mdc-editor textarea {
+  cursor: text;
 }
 
 .mdc-editor__input {

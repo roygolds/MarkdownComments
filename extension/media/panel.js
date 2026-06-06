@@ -19,12 +19,15 @@
     "hide-resolved": "mdc-hide-resolved"
   };
 
+  const SELECTED_CLASS = "mdc-thread--selected";
+
   const defaultState = {
     uri: docUri,
     toggles: { "hide-comments": false, "collapse-comments": false, "hide-resolved": false },
     collapsed: {},
     drafts: {},
-    scrollY: 0
+    scrollY: 0,
+    selected: null
   };
 
   function loadState() {
@@ -40,7 +43,8 @@
         toggles: Object.assign({}, defaultState.toggles, s.toggles),
         collapsed: {},
         drafts: {},
-        scrollY: 0
+        scrollY: 0,
+        selected: null
       };
     }
     return {
@@ -48,7 +52,8 @@
       toggles: Object.assign({}, defaultState.toggles, s.toggles),
       collapsed: s.collapsed || {},
       drafts: s.drafts || {},
-      scrollY: s.scrollY || 0
+      scrollY: s.scrollY || 0,
+      selected: s.selected || null
     };
   }
 
@@ -57,6 +62,36 @@
   function saveState() {
     state.uri = docUri;
     vscode.setState(state);
+  }
+
+  // --- Thread selection ----------------------------------------------------
+  // Mark the card matching the persisted selection. Called after each render so
+  // the bolder border survives the sidebar's frequent re-renders.
+  function applySelected() {
+    if (!state.selected) {
+      return;
+    }
+    let found = false;
+    document.querySelectorAll(".mdc-thread").forEach((el) => {
+      const on = el.getAttribute("data-thread-id") === state.selected;
+      el.classList.toggle(SELECTED_CLASS, on);
+      if (on) {
+        found = true;
+      }
+    });
+    // The previously-selected thread is gone (e.g. deleted) -> forget it.
+    if (!found) {
+      state.selected = null;
+      saveState();
+    }
+  }
+
+  function selectThread(id) {
+    state.selected = id || null;
+    document.querySelectorAll(".mdc-thread").forEach((el) => {
+      el.classList.toggle(SELECTED_CLASS, !!id && el.getAttribute("data-thread-id") === id);
+    });
+    saveState();
   }
 
   // --- Toolbar toggles -----------------------------------------------------
@@ -240,6 +275,7 @@
       const id = thread && thread.getAttribute("data-thread-id");
       if (id) {
         post({ type: "reveal", threadId: id });
+        selectThread(id);
       }
       return;
     }
@@ -320,6 +356,7 @@
   });
 
   window.scrollTo(0, state.scrollY || 0);
+  applySelected();
   window.addEventListener("scroll", () => {
     state.scrollY = window.scrollY;
     saveState();
@@ -340,6 +377,7 @@
     }
     el.classList.remove("mdc-thread--collapsed");
     el.scrollIntoView({ behavior: "smooth", block: "center" });
+    selectThread(msg.threadId);
     el.classList.add("mdc-thread--flash");
     setTimeout(() => el.classList.remove("mdc-thread--flash"), 1200);
   });
