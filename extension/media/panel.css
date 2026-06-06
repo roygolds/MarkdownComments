@@ -239,6 +239,20 @@ body.mdc-sidebar {
   color: var(--vscode-errorForeground, #f14c4c);
 }
 
+.mdc-btn--icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 4px;
+  line-height: 0;
+}
+
+.mdc-icon {
+  width: 14px;
+  height: 14px;
+  display: block;
+}
+
 .mdc-editor {
   margin-top: 6px;
 }

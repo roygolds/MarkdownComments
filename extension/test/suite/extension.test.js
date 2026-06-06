@@ -113,6 +113,31 @@ describe("MarkdownComments extension", () => {
     assert.ok(html.includes('data-action="delete-thread"'), "delete-thread button present");
   });
 
+  it("renders Edit/Delete buttons as accessible SVG icon buttons", async () => {
+    const ext = vscode.extensions.getExtension(EXT_ID);
+    const api = await ext.activate();
+    const MarkdownIt = require("markdown-it");
+    const md = new MarkdownIt({ html: false });
+    api.applyMarkdownCommentsPlugin(md, { interactive: true });
+    const src =
+      "```MarkdownComments\n- id: mc-001\n  comments:\n    - by: A\n      at: \"2026-06-05T08:03:51Z\"\n      text: needs work\n```\nParagraph.\n";
+    const html = md.render(src);
+    // Accessible names preserved via aria-label.
+    assert.ok(html.includes('aria-label="Edit"'), "edit button has aria-label");
+    assert.ok(html.includes('aria-label="Delete"'), "delete-comment button has aria-label");
+    assert.ok(html.includes('aria-label="Delete thread"'), "delete-thread button has aria-label");
+    // Icon styling hook and inline SVG present.
+    assert.ok(html.includes("mdc-btn--icon"), "icon button class present");
+    assert.ok(html.includes("<svg"), "inline SVG icon present");
+    // Textual labels for the converted buttons are gone.
+    assert.ok(!html.includes(">Edit<"), "textual Edit label removed");
+    assert.ok(!html.includes(">Delete<"), "textual Delete label removed");
+    // Behavior-driving data attributes are untouched.
+    assert.ok(html.includes('data-action="edit"'), "edit action preserved");
+    assert.ok(html.includes('data-action="delete-comment"'), "delete-comment action preserved");
+    assert.ok(html.includes('data-action="delete-thread"'), "delete-thread action preserved");
+  });
+
   it("does not emit action buttons in the read-only built-in preview", async () => {
     const ext = vscode.extensions.getExtension(EXT_ID);
     const api = await ext.activate();

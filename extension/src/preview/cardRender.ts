@@ -10,6 +10,20 @@
 
 import type { ThreadView } from "../core/types";
 
+// Inline SVG icons for action buttons. Embedded directly in the HTML string so
+// they work under the strict, nonce-gated CSP (no external fonts/images). The
+// icons use `currentColor` so they inherit the button's text color (e.g. the
+// danger red for delete) and are hidden from screen readers — the button's
+// `aria-label` carries the accessible name.
+const PEN_ICON =
+  '<svg class="mdc-icon" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">' +
+  '<path fill="currentColor" d="M12.146 1.146a.5.5 0 0 1 .708 0l2 2a.5.5 0 0 1 0 .708l-9 9a.5.5 0 0 1-.168.11l-3 1a.5.5 0 0 1-.632-.633l1-3a.5.5 0 0 1 .11-.168l9-9Zm.354 1.06L11.207 3.5 12.5 4.793 13.793 3.5 12.5 2.207ZM11.793 5.5 10.5 4.207l-6.5 6.5V11h.5v.5h.5v.5h.293l6.5-6.5Z"/>' +
+  '</svg>';
+const TRASH_ICON =
+  '<svg class="mdc-icon" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">' +
+  '<path fill="currentColor" d="M6.5 1a1 1 0 0 0-1 1v1H2.5a.5.5 0 0 0 0 1h.55l.8 9.6A1.5 1.5 0 0 0 5.34 15h5.32a1.5 1.5 0 0 0 1.49-1.4L12.95 4h.55a.5.5 0 0 0 0-1H10.5V2a1 1 0 0 0-1-1h-3Zm0 1h3v1h-3V2ZM4.05 4h7.9l-.79 9.52a.5.5 0 0 1-.5.48H5.34a.5.5 0 0 1-.5-.48L4.05 4Zm2.45 1.5a.5.5 0 0 0-.5.5v6a.5.5 0 0 0 1 0V6a.5.5 0 0 0-.5-.5Zm3 0a.5.5 0 0 0-.5.5v6a.5.5 0 0 0 1 0V6a.5.5 0 0 0-.5-.5Z"/>' +
+  '</svg>';
+
 /** Escape a string for safe use in HTML text and double-quoted attributes. */
 export function escapeHtml(s: string): string {
   return s
@@ -84,7 +98,9 @@ function threadActions(resolved: boolean): string {
   return (
     '<span class="mdc-thread__actions">' +
     toggle +
-    '<button type="button" class="mdc-btn mdc-btn--danger" data-action="delete-thread">Delete</button>' +
+    '<button type="button" class="mdc-btn mdc-btn--icon mdc-btn--danger" data-action="delete-thread" title="Delete thread" aria-label="Delete thread">' +
+    TRASH_ICON +
+    "</button>" +
     "</span>"
   );
 }
@@ -98,8 +114,8 @@ function renderComment(
 ): string {
   const actions = opts.interactive
     ? '<span class="mdc-comment__actions">' +
-      `<button type="button" class="mdc-btn" data-action="edit" data-comment-index="${index}">Edit</button>` +
-      `<button type="button" class="mdc-btn mdc-btn--danger" data-action="delete-comment" data-comment-index="${index}">Delete</button>` +
+      `<button type="button" class="mdc-btn mdc-btn--icon" data-action="edit" data-comment-index="${index}" title="Edit" aria-label="Edit">${PEN_ICON}</button>` +
+      `<button type="button" class="mdc-btn mdc-btn--icon mdc-btn--danger" data-action="delete-comment" data-comment-index="${index}" title="Delete" aria-label="Delete">${TRASH_ICON}</button>` +
       "</span>"
     : "";
   return (
