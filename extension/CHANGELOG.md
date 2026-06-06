@@ -7,8 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-06-06
+
+Initial release.
+
 ### Added
 
+- Microsoft Word / Google Docs–style comments stored as inline
+  ` ```MarkdownComments ` fenced YAML blocks, keeping Markdown readable and
+  Git-friendly.
+- Comment lifecycle in VS Code via the native Comments API: create, reply, edit,
+  resolve, reopen, and delete.
+- Stable anchoring of comments to the following Markdown block, with an optional
+  `quote` for sub-block precision and a manual reattach flow when an anchor
+  drifts.
+- Markdown Preview integration (à la Mermaid) that renders comment threads as
+  cards with HTML-escaped content.
 - Interactive **Comments Preview** panel (command:
   `MarkdownComments: Open Comments Preview`, also available from the editor
   title bar). The panel renders the Markdown alongside comment cards and lets
@@ -27,9 +41,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the sidebar is open the built-in Markdown preview hides its inline comment cards
   (re-rendered live via `markdown.preview.refresh`) to avoid showing comments
   twice.
+- Sidebar comment cards use icon buttons (pen to edit, trash can to delete),
+  show a hover affordance, and highlight the selected thread with a bolder
+  border.
 - Hide and collapse controls for comments in the panel, the sidebar, and
   VS Code's built-in Markdown preview: hide all comments, collapse all comment
-  bodies, hide resolved threads, and collapse individual threads.
+  bodies, hide resolved threads, and collapse individual threads. In the source
+  editor, ` ```MarkdownComments ` blocks fold collapsed by default.
+- Diagnostics for invalid YAML, Git conflict markers, duplicate ids,
+  non-canonical ids, non-UTC timestamps, and anchors needing reattachment.
+- Author identity resolved from the `markdownComments.authorName` setting or the
+  local Git `user.name`; timestamps recorded in UTC.
+- Rust core compiled to WebAssembly for parsing, validation, and deterministic
+  edit synthesis.
+- Dedicated MarkdownComments logo, shipped as the extension icon.
 - **Timestamped build versions**: `npm run package` stamps the version as
   `X.Y.Z-YYYYMMDD-HHMMSS` (then restores the clean base version in
   `package.json`), so each `.vsix` is uniquely identifiable and you can tell
@@ -55,26 +80,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   document-derived content is HTML-escaped and never passed into JavaScript;
   inbound webview messages are validated and guarded by a uri + document-version
   check (re-checked after every async step) before any edit is applied.
-
-## [0.1.0] - 2026-06-05
-
-Initial release.
-
-### Added
-
-- Microsoft Word / Google Docs–style comments stored as inline
-  ` ```MarkdownComments ` fenced YAML blocks, keeping Markdown readable and
-  Git-friendly.
-- Comment lifecycle in VS Code via the native Comments API: create, reply, edit,
-  resolve, reopen, and delete.
-- Stable anchoring of comments to the following Markdown block, with an optional
-  `quote` for sub-block precision and a manual reattach flow when an anchor
-  drifts.
-- Markdown Preview integration (à la Mermaid) that renders comment threads as
-  cards with HTML-escaped content.
-- Diagnostics for invalid YAML, Git conflict markers, duplicate ids,
-  non-canonical ids, non-UTC timestamps, and anchors needing reattachment.
-- Author identity resolved from the `markdownComments.authorName` setting or the
-  local Git `user.name`; timestamps recorded in UTC.
-- Rust core compiled to WebAssembly for parsing, validation, and deterministic
-  edit synthesis.
