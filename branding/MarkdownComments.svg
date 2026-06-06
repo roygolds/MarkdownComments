@@ -9,9 +9,9 @@
       <path d="M6917 8234 c-4 -4 -7 -731 -7 -1616 l0 -1609 693 4 c753 3 705 0 900 63 364 117 717 432 891 797 223 468 214 1040 -25 1508 -223 436 -584 726 -1034 831 -86 20 -123 21 -750 25 -363 3 -664 1 -668 -3z m1163 -408 c292 -15 611 -205 812 -484 100 -139 185 -340 219 -522 20 -100 17 -348 -5 -450 -52 -250 -160 -454 -331 -626 -135 -137 -280 -227 -453 -283 -156 -51 -206 -56 -609 -56 l-373 0 0 1175 c0 646 0 1192 0 1212 l0 37 143 3 c156 3 480 0 597 -6z" style="fill: rgb(9, 28, 61);"/>
       <path d="M9865 4331 c-11 -5 -47 -37 -80 -70 l-60 -61 140 -140 c77 -77 142 -140 146 -140 3 0 35 30 72 66 61 60 67 69 67 106 0 38 -6 47 -97 140 -80 80 -105 99 -133 103 -19 3 -44 1 -55 -4z" style="fill: rgb(9, 28, 61);"/>
       <path d="M9351 3832 c-357 -350 -329 -307 -330 -503 -1 -124 -1 -123 127 -115 53 3 113 6 132 6 32 0 59 24 357 322 l323 323 -137 137 c-76 76 -142 138 -148 138 -5 0 -151 -139 -324 -308z" style="fill: rgb(9, 28, 61);"/>
-      <rect x="7500" y="-7140" width="1300" height="230" style="stroke-width: 0px; paint-order: stroke; stroke: rgba(255, 255, 255, 0.9); fill: rgb(8, 197, 167);" rx="11" ry="11" transform="matrix(1, 0, 0, -1, 0, 0)"/>
-      <rect x="7500" y="-6640" width="1300" height="230" style="stroke-width: 0; paint-order: stroke; stroke: rgba(255, 255, 255, 0.9); fill: rgb(8, 197, 167);" rx="11" ry="11" transform="matrix(1, 0, 0, -1, 0, 0)"/>
-      <rect x="7500" y="-6140" width="900" height="230" style="stroke-width: 0; paint-order: stroke; stroke: rgba(255, 255, 255, 0.9); fill: rgb(8, 197, 167);" rx="11" ry="11" transform="matrix(1, 0, 0, -1, 0, 0)"/>
+      <rect x="7500" y="-7140" width="1300" height="230" style="stroke-width: 0px; paint-order: stroke; stroke: rgba(255, 255, 255, 0.9); fill: rgb(8, 197, 167);" rx="150.047" ry="150.047" transform="matrix(1, 0, 0, -1, 0, 0)"/>
+      <rect x="7500" y="-6640" width="1300" height="230" style="stroke-width: 0; paint-order: stroke; stroke: rgba(255, 255, 255, 0.9); fill: rgb(8, 197, 167);" rx="150.047" ry="150.047" transform="matrix(1, 0, 0, -1, 0, 0)"/>
+      <rect x="7500" y="-6140" width="900" height="230" style="stroke-width: 0; paint-order: stroke; stroke: rgba(255, 255, 255, 0.9); fill: rgb(8, 197, 167);" rx="150.047" ry="150.047" transform="matrix(1, 0, 0, -1, 0, 0)"/>
     </g>
   </g>
   <g transform="matrix(1, 0, 0, 1, 0, -10)"/>
