@@ -17,6 +17,7 @@ import { parseRevealMessage, revealThread, isBuiltInPreviewActive } from "./reve
 import { setSidebarVisible, setPendingReveal, clearPendingReveal } from "./previewState";
 import { onDidChangeActivePreview, CommentsPreviewPanel } from "./previewPanel";
 import { chooseRevealTarget } from "./revealRouting";
+import { chooseSidebarTarget } from "./sidebarTarget";
 
 export class CommentsSidebarProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = "markdownComments.sidebar";
@@ -149,19 +150,37 @@ export class CommentsSidebarProvider implements vscode.WebviewViewProvider {
 
   /**
    * Point the sidebar at the document the user is currently looking at: the
-   * active Markdown editor, or — when a webview tab is focused — the source of
-   * our interactive preview panel. Otherwise keep the last target rather than
-   * clearing, so switching to a non-Markdown tab doesn't blank the sidebar.
+   * active Markdown editor, or our interactive preview panel's source, or — when
+   * VS Code's BUILT-IN Markdown preview is the active tab — the backing Markdown
+   * document (still loaded in workspace.textDocuments even though the preview tab
+   * exposes no source uri). Otherwise keep the last target rather than clearing,
+   * so switching to a non-Markdown tab doesn't blank the sidebar. The decision is
+   * a pure, unit-tested function so this method only marshals vscode state.
    */
   private recomputeTarget(): void {
     const editor = vscode.window.activeTextEditor;
-    if (editor && editor.document.languageId === "markdown") {
-      this.setTarget(editor.document.uri);
-      return;
-    }
-    const previewUri = CommentsPreviewPanel.activeSourceUri();
-    if (previewUri) {
-      this.setTarget(previewUri);
+    const activeMarkdownEditorUri =
+      editor && editor.document.languageId === "markdown"
+        ? editor.document.uri.toString()
+        : null;
+    const builtInPreviewActive = isBuiltInPreviewActive();
+    const previewTabLabel = builtInPreviewActive
+      ? vscode.window.tabGroups.activeTabGroup.activeTab?.label ?? null
+      : null;
+    const openMarkdownUris = vscode.workspace.textDocuments
+      .filter((d) => d.languageId === "markdown")
+      .map((d) => d.uri.toString());
+
+    const next = chooseSidebarTarget({
+      activeMarkdownEditorUri,
+      panelSourceUri: CommentsPreviewPanel.activeSourceUri()?.toString() ?? null,
+      builtInPreviewActive,
+      openMarkdownUris,
+      previewTabLabel,
+      currentTargetUri: this.targetUri?.toString() ?? null
+    });
+    if (next) {
+      this.setTarget(vscode.Uri.parse(next));
     }
   }
 

@@ -774,6 +774,47 @@ describe("MarkdownComments extension", () => {
     assert.ok(moved, "the cursor/selection should move to the anchored line in the focused editor");
     assert.ok(visible, "the anchored line should be scrolled into the editor's viewport");
   });
+
+  it("chooseSidebarTarget resolves the doc behind the built-in preview before the source is focused (blank-sidebar regression)", async () => {
+    const ext = vscode.extensions.getExtension(EXT_ID);
+    const api = await ext.activate();
+    assert.strictEqual(typeof api.chooseSidebarTarget, "function");
+
+    const doc = await openMarkdown("sample.md");
+    // Open VS Code's built-in Markdown preview. This is the scenario where the
+    // preview tab can become active before the source editor is ever focused.
+    await vscode.commands.executeCommand("markdown.showPreview", doc.uri);
+
+    // Wait for the backing document to be loaded in workspace.textDocuments (it
+    // stays loaded while the preview is live, even with no editor showing it).
+    let openMarkdownUris = [];
+    for (let i = 0; i < 25; i++) {
+      openMarkdownUris = vscode.workspace.textDocuments
+        .filter((d) => d.languageId === "markdown")
+        .map((d) => d.uri.toString());
+      if (openMarkdownUris.includes(doc.uri.toString())) {
+        break;
+      }
+      await wait(150);
+    }
+
+    // Simulate the buggy state: no active markdown editor, no panel source, no
+    // prior target — only the built-in preview is "active". The pure decision
+    // must still resolve the sidebar to the document behind the preview.
+    const target = api.chooseSidebarTarget({
+      activeMarkdownEditorUri: null,
+      panelSourceUri: null,
+      builtInPreviewActive: true,
+      openMarkdownUris,
+      previewTabLabel: "Preview sample.md",
+      currentTargetUri: null
+    });
+    assert.strictEqual(
+      target,
+      doc.uri.toString(),
+      "sidebar should target the document backing the built-in preview"
+    );
+  });
 });
 
 // Apply a core EditResult's text edits to a string (offsets from LSP positions,
