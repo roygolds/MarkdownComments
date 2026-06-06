@@ -95,7 +95,8 @@ X.Y.Z-YYYYMMDD-HHMMSS      e.g. 0.1.0-20260605-230038
 
 - `markdownComments.authorName`: display name for new comments (defaults to the
   local Git `user.name`).
-- `markdownComments.showResolved`: show resolved threads inline.
+- `markdownComments.showResolved`: show resolved threads inline. When disabled,
+  resolved threads are hidden in the editor.
 
 ## Format
 

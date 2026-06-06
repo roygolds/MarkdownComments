@@ -13,6 +13,19 @@ import { applyEditResult, toVsRange } from "./edits";
 import { Decorations } from "./decorations";
 import { createDiagnostics, publishDiagnostics } from "./diagnostics";
 import { nowUtc, resolveAuthor } from "../model/identity";
+import { focusedThreadIndex } from "./threadFocus";
+
+// Convert a VS Code range into an inclusive focus span. VS Code ranges are
+// end-exclusive, so a range ending at character 0 of a line visually ends on the
+// previous line; collapse that case so a cursor on the trailing line does not
+// spuriously "contain" itself in the next thread.
+function focusSpan(range: vscode.Range): { startLine: number; endLine: number } {
+  let endLine = range.end.line;
+  if (range.end.character === 0 && endLine > range.start.line) {
+    endLine -= 1;
+  }
+  return { startLine: range.start.line, endLine };
+}
 
 class MarkdownComment implements vscode.Comment {
   public contextValue = "canEdit";
@@ -91,6 +104,11 @@ export class CommentManager implements vscode.Disposable {
         if (editor && editor.document.languageId === "markdown") {
           this.refresh(editor.document);
         }
+      }),
+      vscode.window.onDidChangeTextEditorSelection((e) => {
+        if (e.textEditor.document.languageId === "markdown") {
+          this.applyThreadFocus(e.textEditor);
+        }
       })
     );
 
@@ -159,6 +177,44 @@ export class CommentManager implements vscode.Disposable {
         this.decorations.apply(editor, result.fences);
       }
     }
+
+    // Build all threads collapsed, then expand the one under the cursor (if any)
+    // within this same synchronous refresh to avoid a visible expand/collapse
+    // flicker after a rebuild.
+    const focusEditor = this.editorForUri(document.uri);
+    if (focusEditor) {
+      this.applyThreadFocus(focusEditor);
+    }
+  }
+
+  /** Expand only the focused thread (cursor inside its span); collapse the rest. */
+  private applyThreadFocus(editor: vscode.TextEditor): void {
+    const threads = this.threadsByUri.get(editor.document.uri.toString());
+    if (!threads || threads.length === 0) {
+      return;
+    }
+    const cursorLine = editor.selection.active.line;
+    const spans = threads.map((t) => (t.range ? focusSpan(t.range) : null));
+    const focused = focusedThreadIndex(spans, cursorLine);
+    threads.forEach((t, i) => {
+      const next =
+        i === focused
+          ? vscode.CommentThreadCollapsibleState.Expanded
+          : vscode.CommentThreadCollapsibleState.Collapsed;
+      if (t.collapsibleState !== next) {
+        t.collapsibleState = next;
+      }
+    });
+  }
+
+  /** Pick the editor showing a uri, preferring the active editor. */
+  private editorForUri(uri: vscode.Uri): vscode.TextEditor | undefined {
+    const key = uri.toString();
+    const active = vscode.window.activeTextEditor;
+    if (active && active.document.uri.toString() === key) {
+      return active;
+    }
+    return vscode.window.visibleTextEditors.find((e) => e.document.uri.toString() === key);
   }
 
   private buildThread(
@@ -167,6 +223,13 @@ export class CommentManager implements vscode.Disposable {
     thread: ThreadView,
     showResolved: boolean
   ): vscode.CommentThread | undefined {
+    const resolved = thread.status === "resolved";
+    // When the "show resolved" setting is off, resolved threads are hidden from
+    // the editor entirely (no thread is created, so no gutter icon or window).
+    if (resolved && !showResolved) {
+      return undefined;
+    }
+
     const range = thread.anchor.range
       ? toVsRange(thread.anchor.range)
       : toVsRange(fence.range);
@@ -186,7 +249,6 @@ export class CommentManager implements vscode.Disposable {
     vsThread.canReply = true;
     this.threadIds.set(vsThread, thread.id);
 
-    const resolved = thread.status === "resolved";
     vsThread.state = resolved
       ? vscode.CommentThreadState.Resolved
       : vscode.CommentThreadState.Unresolved;
@@ -198,10 +260,9 @@ export class CommentManager implements vscode.Disposable {
       vsThread.label = `"${thread.quote}"`;
     }
 
-    vsThread.collapsibleState =
-      resolved && !showResolved
-        ? vscode.CommentThreadCollapsibleState.Collapsed
-        : vscode.CommentThreadCollapsibleState.Expanded;
+    // Threads render collapsed by default; applyThreadFocus expands the single
+    // thread whose span contains the cursor line.
+    vsThread.collapsibleState = vscode.CommentThreadCollapsibleState.Collapsed;
 
     return vsThread;
   }

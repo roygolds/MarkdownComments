@@ -58,7 +58,7 @@
         "markdownComments.showResolved": {
           "type": "boolean",
           "default": true,
-          "description": "Show resolved comment threads inline. When disabled, resolved threads are collapsed in the editor."
+          "description": "Show resolved comment threads in the editor. When disabled, resolved threads are hidden."
         }
       }
     },
