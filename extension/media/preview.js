@@ -82,26 +82,26 @@
   // invisible `.mdc-reveal-anchor` carrying a fresh nonce next to the matching
   // fence. Scroll it into view once per nonce (VS Code gives extensions no API to
   // scroll the built-in preview, so we do it here from inside the preview DOM).
-  let lastRevealNonce = null;
+  // The robust scroll/dedup/retry core lives in previewReveal.js (a sibling
+  // preview script) so it can be unit-tested without a webview.
+  var revealApi = (typeof self !== "undefined" && self.MdcPreviewReveal) || null;
+  var revealController = revealApi
+    ? revealApi.createRevealController({
+        document: document,
+        requestAnimationFrame:
+          typeof window !== "undefined" && window.requestAnimationFrame
+            ? window.requestAnimationFrame.bind(window)
+            : null,
+        setTimeout:
+          typeof window !== "undefined" && window.setTimeout
+            ? window.setTimeout.bind(window)
+            : null
+      })
+    : null;
+
   function applyReveal() {
-    const anchor = document.querySelector(".mdc-reveal-anchor[data-mdc-reveal-nonce]");
-    if (!anchor) {
-      return;
-    }
-    const nonce = anchor.getAttribute("data-mdc-reveal-nonce");
-    if (!nonce || nonce === lastRevealNonce) {
-      return;
-    }
-    lastRevealNonce = nonce;
-    try {
-      anchor.scrollIntoView({ block: "start", behavior: "smooth" });
-    } catch (e) {
-      anchor.scrollIntoView();
-    }
-    const flash = anchor.nextElementSibling || anchor.parentElement;
-    if (flash) {
-      flash.classList.add("mdc-reveal-flash");
-      setTimeout(() => flash.classList.remove("mdc-reveal-flash"), 1200);
+    if (revealController) {
+      revealController.applyReveal();
     }
   }
 

@@ -721,6 +721,59 @@ describe("MarkdownComments extension", () => {
     }
     assert.ok(visible, "the anchored line should be scrolled into the editor's viewport");
   });
+
+  it("source-mode reveal moves the editor selection to the anchored line and shows it", async () => {
+    const ext = vscode.extensions.getExtension(EXT_ID);
+    const api = await ext.activate();
+
+    // Long document so the anchor sits below the first viewport; on a short doc a
+    // selection-only reveal would be invisible, which is exactly Bug 1(b).
+    const filler = Array.from({ length: 200 }, (_, i) => `Body line ${i + 1}.`).join("\n");
+    const fence =
+      "```MarkdownComments\n" +
+      "- id: mc-src\n" +
+      '  quote: "source mode marker"\n' +
+      "  comments:\n" +
+      "    - by: Tester\n" +
+      '      at: "2026-06-05T08:03:51Z"\n' +
+      "      text: source comment\n" +
+      "```\n";
+    const content = `${filler}\n${fence}A paragraph with the source mode marker inline.\n`;
+
+    const doc = await vscode.workspace.openTextDocument({ content, language: "markdown" });
+    const editor = await vscode.window.showTextDocument(doc);
+
+    const targetLine = api.findThreadRange(doc.getText(), "mc-src").start.line;
+    assert.ok(targetLine > 100, "the anchored line should be deep in the document");
+
+    // Park the cursor and viewport at the very top.
+    editor.selection = new vscode.Selection(0, 0, 0, 0);
+    editor.revealRange(new vscode.Range(0, 0, 0, 0), vscode.TextEditorRevealType.AtTop);
+    await wait(150);
+
+    // The source editor is the active surface and no built-in preview is the
+    // active tab, so this exercises the source-mode reveal path.
+    await api.revealThread(doc.uri, "mc-src");
+
+    let moved = false;
+    let visible = false;
+    for (let i = 0; i < 20; i++) {
+      const active = vscode.window.activeTextEditor;
+      moved =
+        !!active &&
+        active.document.uri.toString() === doc.uri.toString() &&
+        active.selection.active.line === targetLine;
+      visible = editor.visibleRanges.some(
+        (r) => r.start.line <= targetLine && targetLine <= r.end.line
+      );
+      if (moved && visible) {
+        break;
+      }
+      await wait(150);
+    }
+    assert.ok(moved, "the cursor/selection should move to the anchored line in the focused editor");
+    assert.ok(visible, "the anchored line should be scrolled into the editor's viewport");
+  });
 });
 
 // Apply a core EditResult's text edits to a string (offsets from LSP positions,

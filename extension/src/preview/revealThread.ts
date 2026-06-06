@@ -78,7 +78,7 @@ function toVsRange(r: CoreRange): vscode.Range {
  * "markdownCommentsPreview" (no dot). When true, a reveal should avoid stealing
  * keyboard focus away from that preview and should instead drive its scroll-sync.
  */
-function isBuiltInPreviewActive(): boolean {
+export function isBuiltInPreviewActive(): boolean {
   const tab = vscode.window.tabGroups.activeTabGroup.activeTab;
   const input = tab?.input;
   if (input instanceof vscode.TabInputWebview) {
@@ -204,24 +204,45 @@ export async function revealThread(
   let editor = vscode.window.visibleTextEditors.find(
     (e) => e.document.uri.toString() === uri.toString()
   );
-  if (!editor) {
-    try {
-      editor = await vscode.window.showTextDocument(document, {
-        preview: false,
-        preserveFocus: previewActive,
-        viewColumn: previewActive ? vscode.ViewColumn.Beside : undefined
-      });
-    } catch {
-      return;
-    }
-  }
-  editor.selection = selection;
 
   if (previewActive) {
+    // Built-in preview is the focused surface: keep keyboard focus where it is
+    // and drive the preview via editor->preview scroll-sync. Reuse a visible
+    // source editor if one exists, otherwise open one beside without stealing
+    // focus.
+    if (!editor) {
+      try {
+        editor = await vscode.window.showTextDocument(document, {
+          preview: false,
+          preserveFocus: true,
+          viewColumn: vscode.ViewColumn.Beside
+        });
+      } catch {
+        return;
+      }
+    }
+    editor.selection = selection;
     // The built-in preview syncs to the editor's TOP visible line; align there
     // and make sure the scroll actually happens so the preview follows.
     await driveScrollSync(editor, vsRange, vscode.TextEditorRevealType.AtTop);
     return;
   }
+
+  // Source mode: reliably move keyboard focus to the editor and put the cursor
+  // on the anchored line. Setting `editor.selection` alone does not focus an
+  // editor that is merely visible (e.g. when focus is on the sidebar), so always
+  // route through showTextDocument with preserveFocus:false — on short documents
+  // this is what makes the click visibly do something.
+  try {
+    editor = await vscode.window.showTextDocument(document, {
+      preview: false,
+      preserveFocus: false,
+      viewColumn: editor ? editor.viewColumn : undefined,
+      selection
+    });
+  } catch {
+    return;
+  }
+  editor.selection = selection;
   editor.revealRange(vsRange, vscode.TextEditorRevealType.InCenter);
 }

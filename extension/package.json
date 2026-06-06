@@ -41,6 +41,7 @@
       ]
     },
     "markdown.previewScripts": [
+      "./media/previewReveal.js",
       "./media/preview.js"
     ],
     "markdown.previewStyles": [

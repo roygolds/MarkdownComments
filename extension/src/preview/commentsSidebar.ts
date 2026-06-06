@@ -13,9 +13,10 @@ import * as vscode from "vscode";
 import { randomBytes } from "crypto";
 import { selectSidebarBody } from "./documentCards";
 import { CommentEditController } from "./commentEditController";
-import { parseRevealMessage, revealThread } from "./revealThread";
+import { parseRevealMessage, revealThread, isBuiltInPreviewActive } from "./revealThread";
 import { setSidebarVisible, setPendingReveal, clearPendingReveal } from "./previewState";
 import { onDidChangeActivePreview, CommentsPreviewPanel } from "./previewPanel";
+import { chooseRevealTarget } from "./revealRouting";
 
 export class CommentsSidebarProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = "markdownComments.sidebar";
@@ -71,15 +72,26 @@ export class CommentsSidebarProvider implements vscode.WebviewViewProvider {
         // Only navigate when the click came from the document the sidebar is
         // currently showing; a stale click from a previous target is ignored.
         if (this.targetUri && reveal.uri === this.targetUri.toString()) {
-          // Prefer focusing the comment inside the interactive preview panel
-          // when it is open for this document. Otherwise, if VS Code's built-in
-          // Markdown preview is open, drive it through our contributed preview
-          // script: stash the reveal target and refresh so the document re-renders
-          // with a scroll anchor that media/preview.js scrolls into view — no raw
-          // editor needed. As a last resort (no preview at all), reveal the source.
-          if (CommentsPreviewPanel.revealThread(this.targetUri, reveal.threadId)) {
-            // Routed to the interactive panel.
-          } else if (isBuiltInPreviewOpen()) {
+          // Route the reveal to the surface the user is ACTUALLY looking at, not
+          // merely whichever surface happens to be open. Prefer the interactive
+          // preview panel when it owns this document; otherwise drive the
+          // built-in preview only when it is the focused/visible surface; and
+          // when the user is in the raw source (or nothing else applies), reveal
+          // the source editor. The decision is a pure, unit-tested function.
+          const panelHandled = CommentsPreviewPanel.revealThread(this.targetUri, reveal.threadId);
+          const active = vscode.window.activeTextEditor;
+          const target = chooseRevealTarget({
+            panelHandled,
+            builtInPreviewActive: isBuiltInPreviewActive(),
+            sourceEditorActive:
+              !!active && active.document.uri.toString() === this.targetUri.toString(),
+            builtInPreviewOpen: isBuiltInPreviewOpen()
+          });
+          if (target === "preview") {
+            // Drive VS Code's built-in Markdown preview through our contributed
+            // preview script: stash the reveal target and refresh so the document
+            // re-renders with a scroll anchor that media/preview.js scrolls into
+            // view — no raw editor needed.
             setPendingReveal(reveal.threadId);
             void refreshBuiltInPreview();
             // The refresh re-renders and embeds the anchor within a beat; drop the
@@ -87,9 +99,10 @@ export class CommentsSidebarProvider implements vscode.WebviewViewProvider {
             // different file's preview) can't pick up a stale, possibly colliding
             // thread id.
             setTimeout(() => clearPendingReveal(), 2000);
-          } else {
+          } else if (target === "source") {
             void revealThread(this.targetUri, reveal.threadId);
           }
+          // target === "panel": already revealed by CommentsPreviewPanel above.
         }
         return;
       }
