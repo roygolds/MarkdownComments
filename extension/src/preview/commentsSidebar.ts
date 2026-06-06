@@ -18,8 +18,13 @@ import { setSidebarVisible, setPendingReveal, clearPendingReveal } from "./previ
 import { onDidChangeActivePreview, CommentsPreviewPanel } from "./previewPanel";
 import { chooseRevealTarget } from "./revealRouting";
 import { chooseSidebarTarget } from "./sidebarTarget";
+import { chooseCustomPreviewOverride } from "./customPreviewTarget";
 import { classifyActiveTab } from "./activeTabKind";
 import type { ActiveTabKind, ActiveTabDescriptor } from "./activeTabKind";
+import {
+  isCustomMarkdownPreviewTabInput,
+  chooseRefreshCommands
+} from "./builtInPreviewRefresh";
 
 /**
  * Diagnostic-only: a compact description of the focused tab group's active tab —
@@ -203,7 +208,7 @@ export class CommentsSidebarProvider implements vscode.WebviewViewProvider {
             // re-renders with a scroll anchor that media/preview.js scrolls into
             // view — no raw editor needed.
             setPendingReveal(reveal.threadId);
-            void refreshBuiltInPreview();
+            void refreshBuiltInPreview((msg) => this.output.appendLine(`${this.stamp()} ${msg}`));
             // The refresh re-renders and embeds the anchor within a beat; drop the
             // pending target afterwards so an unrelated later refresh (e.g. a
             // different file's preview) can't pick up a stale, possibly colliding
@@ -228,6 +233,10 @@ export class CommentsSidebarProvider implements vscode.WebviewViewProvider {
       this.viewListener?.dispose();
       this.viewListener = undefined;
       this.view = undefined;
+      // A genuine hide: the view was disposed (e.g. its view container was closed
+      // or VS Code reclaimed the hidden webview). Route through applyVisibility so
+      // the built-in preview re-renders and the inline cards reappear.
+      this.output.appendLine(`${this.stamp()} visibility onDidDispose -> applyVisibility(false)`);
       this.applyVisibility(false);
     });
     // Adopt whatever Markdown document is active when the view opens.
@@ -236,6 +245,7 @@ export class CommentsSidebarProvider implements vscode.WebviewViewProvider {
   }
 
   private onVisibilityChanged(visible: boolean): void {
+    this.output.appendLine(`${this.stamp()} visibility onDidChangeVisibility(${visible})`);
     if (visible) {
       this.recomputeTarget();
       this.render();
@@ -247,14 +257,25 @@ export class CommentsSidebarProvider implements vscode.WebviewViewProvider {
    * Record the sidebar's visibility and, only when it actually changed, re-render
    * the built-in preview so its inline comment cards appear/disappear in step
    * with the sidebar. The change guard avoids redundant global preview refreshes.
+   *
+   * The diagnostics here exist to confirm — on the user's machine, where the
+   * built-in preview surfaces as a custom editor — that a genuine HIDE actually
+   * reaches the refresh (i.e. is not swallowed by the lastAppliedVisible guard or
+   * by setSidebarVisible's own no-op guard).
    */
   private applyVisibility(visible: boolean): void {
     setSidebarVisible(visible);
     if (this.lastAppliedVisible === visible) {
+      this.output.appendLine(
+        `${this.stamp()} applyVisibility(${visible}) swallowed (unchanged; no preview refresh)`
+      );
       return;
     }
     this.lastAppliedVisible = visible;
-    void refreshBuiltInPreview();
+    this.output.appendLine(
+      `${this.stamp()} applyVisibility(${visible}) changed -> refreshBuiltInPreview`
+    );
+    void refreshBuiltInPreview((msg) => this.output.appendLine(`${this.stamp()} ${msg}`));
   }
 
   /**
@@ -285,13 +306,29 @@ export class CommentsSidebarProvider implements vscode.WebviewViewProvider {
     const builtInPreviewActive = isBuiltInPreviewActive();
     // Classify the focused tab so we can recognize "the user is looking at the
     // markdown (source, our panel, or its built-in preview)" even when viewType
-    // detection of the built-in preview fails on some machines.
-    const kind = this.activeTabKind();
+    // detection of the built-in preview fails on some machines. Marshal the active
+    // tab input ONCE so we can also read a custom-editor preview's backing uri
+    // (TabInputCustom.uri) below — that uri is authoritative for which document is
+    // being previewed.
+    const activeTabInput = vscode.window.tabGroups.activeTabGroup.activeTab?.input;
+    const activeTabDesc = this.describeActiveTabInput(activeTabInput);
+    const kind = classifyActiveTab(activeTabDesc);
     // The built-in preview is preview-like even if its viewType did not match,
     // and so is any unrecognized webview (with --disable-extensions the only
     // webviews are the built-in preview, our panel, and our sidebar).
     const previewLikeActive =
       builtInPreviewActive || kind === "markdownPreview" || kind === "previewLikeWebview";
+    // When the built-in preview surfaces as a CUSTOM editor (TabInputCustom with a
+    // "markdown.preview" viewType -> classifyActiveTab "markdownPreview"), the tab
+    // input exposes the previewed document's uri DIRECTLY. Capture it so we can
+    // target it even when switching to a preview of a DIFFERENT file while the old
+    // target is still loaded (which chooseSidebarTarget's anti-churn shortcut would
+    // otherwise keep). Other custom editors (image preview, etc.) classify as
+    // "nonMarkdownDoc", so only the markdown-preview custom editor reaches here.
+    const customPreviewUri =
+      kind === "markdownPreview" && activeTabDesc.kind === "custom"
+        ? activeTabDesc.uri ?? null
+        : null;
     // Pass the active tab's label whenever the surface is preview-like (not only
     // when isBuiltInPreviewActive matched) so chooseSidebarTarget's basename
     // disambiguation still works with multiple open md docs.
@@ -312,17 +349,6 @@ export class CommentsSidebarProvider implements vscode.WebviewViewProvider {
       .map((d) => d.uri.toString());
     const activeTabDiag = describeActiveTab();
 
-    // Feed previewLikeActive as the built-in-preview signal so the pure fn's
-    // preview branch resolves the backing markdown from the (scheme-filtered)
-    // open docs even when viewType detection failed.
-    const next = chooseSidebarTarget({
-      activeMarkdownEditorUri,
-      panelSourceUri,
-      builtInPreviewActive: previewLikeActive,
-      openMarkdownUris,
-      previewTabLabel,
-      currentTargetUri: this.targetUri?.toString() ?? null
-    });
     this.lastDecisionState = {
       activeMarkdownEditorUri,
       panelSourceUri,
@@ -332,11 +358,38 @@ export class CommentsSidebarProvider implements vscode.WebviewViewProvider {
       currentTargetUri: this.targetUri?.toString() ?? null
     };
 
+    // Precedence: active markdown SOURCE editor -> our preview panel source ->
+    // custom-editor preview input.uri -> chooseSidebarTarget(...) (which handles
+    // the WEBVIEW preview variant that exposes no uri, plus KEEP/CLEAR). The
+    // override returns null when a source editor or panel source is present, so
+    // those still win via chooseSidebarTarget's branches a/b; it only short-
+    // circuits the anti-churn heuristic for the custom-editor preview.
+    const override = chooseCustomPreviewOverride({
+      activeMarkdownEditorUri,
+      panelSourceUri,
+      customPreviewUri
+    });
+    // Feed previewLikeActive as the built-in-preview signal so the pure fn's
+    // preview branch resolves the backing markdown from the (scheme-filtered)
+    // open docs even when viewType detection failed.
+    const next =
+      override ??
+      chooseSidebarTarget({
+        activeMarkdownEditorUri,
+        panelSourceUri,
+        builtInPreviewActive: previewLikeActive,
+        openMarkdownUris,
+        previewTabLabel,
+        currentTargetUri: this.targetUri?.toString() ?? null
+      });
+
     let outcome: string;
     if (next) {
-      // A specific active markdown surface resolved: adopt it.
+      // A specific active markdown surface resolved: adopt it. When `override`
+      // fired this routes the custom-editor preview's backing uri through
+      // setTarget(), bypassing chooseSidebarTarget's anti-churn shortcut.
       this.applyDecision(next);
-      outcome = `target=${next}`;
+      outcome = override ? `target(customPreview)=${next}` : `target=${next}`;
     } else if (kind === "nonMarkdownDoc") {
       // CLEAR ONLY for a genuine other document: a non-md text editor, notebook,
       // or custom editor. (e.g. focusing notes.txt clears the sidebar.)
@@ -359,6 +412,7 @@ export class CommentsSidebarProvider implements vscode.WebviewViewProvider {
       activeEditorLanguageId: editor ? editor.document.languageId : null,
       activeEditorUri: editor ? editor.document.uri.toString() : null,
       builtInPreviewActive,
+      customPreviewUri,
       panelSourceUri,
       previewTabLabel,
       openMarkdownUris,
@@ -367,35 +421,13 @@ export class CommentsSidebarProvider implements vscode.WebviewViewProvider {
   }
 
   /**
-   * Classify the focused tab group's active tab into the model recomputeTarget()
-   * uses to decide target resolution and KEEP-vs-CLEAR. The key reliability fix:
-   * built-in-preview detection via viewType is NOT trustworthy on every machine,
-   * so an unrecognized webview is treated as preview-like (it can only be the
-   * built-in preview, our panel, or our sidebar under --disable-extensions), and
-   * non-content schemes (comment:, output:, git:, …) are "ambiguous" so opening
-   * the Output panel or a comment input box never clears the sidebar.
-   *
-   * - No active tab / no input        -> "ambiguous"
-   * - TabInputText, file/untitled     -> "markdownSource" if the doc is markdown
-   *                                      (languageId, or .md when not yet loaded),
-   *                                      else "nonMarkdownDoc"
-   * - TabInputText, any other scheme  -> "ambiguous" (not user content)
-   * - TabInputWebview, markdown.preview or our panel viewType -> "markdownPreview"
-   * - TabInputWebview, anything else  -> "previewLikeWebview"
-   * - TabInputNotebook / TabInputCustom -> "nonMarkdownDoc"
-   * - otherwise                       -> "ambiguous"
-   */
-  private activeTabKind(): ActiveTabKind {
-    const input = vscode.window.tabGroups.activeTabGroup.activeTab?.input;
-    return classifyActiveTab(this.describeActiveTabInput(input));
-  }
-
-  /**
    * Marshal the focused tab group's active tab input into the dependency-free
    * descriptor that classifyActiveTab() classifies. This is the only part that
    * touches live vscode/workspace state (the TextDocument languageId lookup for a
    * still-loadable text tab); the classification itself is the pure helper, unit
-   * tested exhaustively in test/unit/activeTabKind.test.js.
+   * tested exhaustively in test/unit/activeTabKind.test.js. recomputeTarget()
+   * calls this directly (then classifyActiveTab) so it can also read a custom-
+   * editor preview's backing uri from the same descriptor.
    */
   private describeActiveTabInput(input: unknown): ActiveTabDescriptor {
     if (input === undefined || input === null) {
@@ -417,7 +449,7 @@ export class CommentsSidebarProvider implements vscode.WebviewViewProvider {
       return { kind: "webview", viewType: input.viewType };
     }
     if (input instanceof vscode.TabInputCustom) {
-      return { kind: "custom", viewType: input.viewType };
+      return { kind: "custom", viewType: input.viewType, uri: input.uri.toString() };
     }
     if (input instanceof vscode.TabInputNotebook) {
       return { kind: "notebook" };
@@ -467,6 +499,7 @@ export class CommentsSidebarProvider implements vscode.WebviewViewProvider {
     activeEditorLanguageId: string | null;
     activeEditorUri: string | null;
     builtInPreviewActive: boolean;
+    customPreviewUri: string | null;
     panelSourceUri: string | null;
     previewTabLabel: string | null;
     openMarkdownUris: string[];
@@ -479,6 +512,7 @@ export class CommentsSidebarProvider implements vscode.WebviewViewProvider {
       `${this.stamp()} recompute outcome=${info.outcome} ` +
         `kind=${info.kind} previewLike=${info.previewLikeActive} ` +
         `activeEditor=${activeEditor} builtInPreview=${info.builtInPreviewActive} ` +
+        `customPreview=${info.customPreviewUri ?? "none"} ` +
         `activeTab=${info.activeTabDiag} ` +
         `panel=${info.panelSourceUri ?? "none"} ` +
         `previewTab=${info.previewTabLabel ? JSON.stringify(info.previewTabLabel) : "none"} ` +
@@ -785,7 +819,7 @@ ${bodyHtml}
   }
 }
 
-let refreshCommand: string | undefined;
+let availableCommandsCache: ReadonlySet<string> | undefined;
 
 /**
  * Whether any open tab is VS Code's built-in Markdown preview. Its webview tab
@@ -812,29 +846,91 @@ function isBuiltInPreviewOpen(): boolean {
 }
 
 /**
- * Re-render VS Code's built-in Markdown preview so its inline comment cards
- * reflect the current sidebar visibility. `markdown.preview.refresh` cleans the
- * markdown engine cache and refreshes every open preview, which re-runs our
- * fence renderer (and so re-reads the sidebar-visible flag). `markdown.api.reloadPlugins`
- * only reloads plugin code and does NOT refresh already-open previews, so it is
- * used only as a fallback. Failures are swallowed; the preview still updates on
- * the next document change.
+ * Whether any open tab is the built-in Markdown preview surfacing as a CUSTOM
+ * editor (TabInputCustom with viewType "vscode.markdown.preview.editor"). This is
+ * the variant the bug report is about: unlike the webview preview, it is the
+ * StaticMarkdownPreview in markdown-language-features. `markdown.preview.refresh`
+ * force-refreshes it too (both DynamicMarkdownPreview and StaticMarkdownPreview
+ * call MarkdownPreview.refresh(true)), but detecting it lets us log the path and
+ * fire an extra, best-effort re-render kick for robustness across VS Code builds.
  */
-async function refreshBuiltInPreview(): Promise<void> {
+function isCustomEditorPreviewOpen(): boolean {
+  for (const group of vscode.window.tabGroups.all) {
+    for (const tab of group.tabs) {
+      const input = tab.input;
+      // Marshal the live tab input into the dependency-free descriptor the pure
+      // predicate classifies, so the "custom-editor markdown preview" contract is
+      // owned by builtInPreviewRefresh.js and unit-tested exhaustively.
+      if (
+        input instanceof vscode.TabInputCustom &&
+        isCustomMarkdownPreviewTabInput({ kind: "custom", viewType: input.viewType })
+      ) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * Re-render VS Code's built-in Markdown preview so its inline comment cards
+ * reflect the current sidebar visibility (and so a sidebar reveal embeds its
+ * scroll anchor). This must work for BOTH built-in preview variants:
+ *   - the WEBVIEW preview (DynamicMarkdownPreview), and
+ *   - the CUSTOM-EDITOR preview (StaticMarkdownPreview, viewType
+ *     "vscode.markdown.preview.editor"), which is what this user sees.
+ *
+ * Primary mechanism: `markdown.preview.refresh`. In markdown-language-features it
+ * cleans the engine cache and calls MarkdownPreviewManager.refresh(), which
+ * iterates BOTH the dynamic and static preview stores and calls each preview's
+ * refresh() — and both DynamicMarkdownPreview.refresh() and
+ * StaticMarkdownPreview.refresh() delegate to MarkdownPreview.refresh(true) (a
+ * FORCED update that bypasses the document-version equality short-circuit). So a
+ * plain visibility toggle (no document edit) still forces a full re-render that
+ * re-runs our markdown-it fence renderer, which re-reads isSidebarVisible().
+ *
+ * Belt-and-suspenders: when a custom-editor preview is open we ALSO fire
+ * `markdown.api.reloadPlugins` if present. Reloading the markdown plugins raises
+ * the builtin engine's onContributionsChanged, which schedules refresh(true) on
+ * every managed preview (dynamic AND static) — an independent path to a forced
+ * re-render in case a given VS Code build wires `markdown.preview.refresh`
+ * differently. Neither command steals editor focus.
+ *
+ * All failures are swallowed; the preview still updates on the next document
+ * change. `log` (optional) records, into the MarkdownComments output channel,
+ * exactly which commands ran and whether a custom-editor preview was detected, so
+ * the path can be confirmed on the user's machine.
+ */
+async function refreshBuiltInPreview(log?: (msg: string) => void): Promise<void> {
   try {
-    if (refreshCommand === undefined) {
-      const commands = await vscode.commands.getCommands(true);
-      refreshCommand = commands.includes("markdown.preview.refresh")
-        ? "markdown.preview.refresh"
-        : commands.includes("markdown.api.reloadPlugins")
-          ? "markdown.api.reloadPlugins"
-          : "";
+    if (availableCommandsCache === undefined) {
+      availableCommandsCache = new Set(await vscode.commands.getCommands(true));
     }
-    if (refreshCommand) {
-      await vscode.commands.executeCommand(refreshCommand);
+    const commands = availableCommandsCache;
+    const customPreviewOpen = isCustomEditorPreviewOpen();
+
+    // Decide which best-effort refresh commands to run (pure, unit-tested):
+    //   - "markdown.preview.refresh" force-refreshes BOTH preview variants, and
+    //   - "markdown.api.reloadPlugins" is the extra custom-editor-only kick.
+    const ran = chooseRefreshCommands({
+      customPreviewOpen,
+      hasRefresh: commands.has("markdown.preview.refresh"),
+      hasReloadPlugins: commands.has("markdown.api.reloadPlugins")
+    });
+    for (const command of ran) {
+      // Neither command steals editor focus; failures are swallowed below.
+      await vscode.commands.executeCommand(command);
     }
-  } catch {
-    /* best effort */
+
+    log?.(
+      `refreshBuiltInPreview customPreviewOpen=${customPreviewOpen} ` +
+        `builtInPreviewOpen=${isBuiltInPreviewOpen()} ran=[${ran.join(", ")}]`
+    );
+    if (ran.length === 0) {
+      log?.("refreshBuiltInPreview: no markdown refresh command available");
+    }
+  } catch (e) {
+    log?.(`refreshBuiltInPreview error=${String(e)}`);
   }
 }
 

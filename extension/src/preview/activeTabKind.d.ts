@@ -15,6 +15,13 @@ export interface ActiveTabDescriptor {
   kind: "text" | "webview" | "custom" | "notebook" | "none" | "other";
   /** For "webview"/"custom": the tab input's viewType. */
   viewType?: string | null;
+  /**
+   * For "custom": the tab input's backing resource uri (TabInputCustom.uri),
+   * as a string. The built-in Markdown preview, when it surfaces as a custom
+   * editor, exposes the previewed document's uri here. Ignored by
+   * classifyActiveTab(); consumed by recomputeTarget() to target it directly.
+   */
+  uri?: string | null;
   /** For "text": the tab uri's scheme (e.g. "file", "untitled", "comment"). */
   uriScheme?: string | null;
   /** For "text": the loaded document's languageId, if the document is loaded. */
