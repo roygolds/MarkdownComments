@@ -130,4 +130,61 @@ describe("chooseSidebarTarget", () => {
   it("returns null during built-in preview when no markdown docs are loaded", () => {
     assert.strictEqual(decide({ builtInPreviewActive: true, openMarkdownUris: [] }), null);
   });
+
+  it("replaces a stale current target that is no longer loaded (does not pin a closed doc)", () => {
+    // Churn-avoidance must only keep the current target when it is STILL loaded.
+    // A previously-targeted doc that was closed (absent from openMarkdownUris)
+    // must not be re-asserted; the function falls through to resolve the doc that
+    // is actually loaded, so the sidebar can't get stuck on a dead document.
+    assert.strictEqual(
+      decide({
+        builtInPreviewActive: true,
+        currentTargetUri: "file:///closed.md",
+        openMarkdownUris: ["file:///a.md"]
+      }),
+      "file:///a.md"
+    );
+  });
+
+  it("keeps the loaded current target over a label naming another doc (anti-churn beats label)", () => {
+    // Documented priority: keep-current-loaded-target outranks tab-label
+    // disambiguation. With the current target still loaded, a label pointing at a
+    // different open doc must not steal the target.
+    assert.strictEqual(
+      decide({
+        builtInPreviewActive: true,
+        currentTargetUri: "file:///a.md",
+        openMarkdownUris: ["file:///a.md", "file:///b.md"],
+        previewTabLabel: "Preview b.md"
+      }),
+      "file:///a.md"
+    );
+  });
+
+  it("disambiguates via a bare-filename preview label (no \"Preview \" prefix)", () => {
+    // VS Code's preview tab label varies by version: sometimes "Preview name.md",
+    // sometimes just "name.md". The basename-substring match must handle both.
+    assert.strictEqual(
+      decide({
+        builtInPreviewActive: true,
+        openMarkdownUris: ["file:///docs/a.md", "file:///docs/b.md"],
+        previewTabLabel: "b.md"
+      }),
+      "file:///docs/b.md"
+    );
+  });
+
+  it("does not mis-target when one basename is a suffix of another (safe-fail to keep current)", () => {
+    // "a.md" is a substring of "ba.md", so a label naming "ba.md" matches BOTH
+    // candidates. The function must treat this as ambiguous and return null
+    // (keep current) rather than silently guessing the wrong document.
+    assert.strictEqual(
+      decide({
+        builtInPreviewActive: true,
+        openMarkdownUris: ["file:///a.md", "file:///ba.md"],
+        previewTabLabel: "Preview ba.md"
+      }),
+      null
+    );
+  });
 });

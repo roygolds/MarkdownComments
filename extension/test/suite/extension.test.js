@@ -815,6 +815,43 @@ describe("MarkdownComments extension", () => {
       "sidebar should target the document backing the built-in preview"
     );
   });
+
+  it("the built-in preview tab label embeds the source basename (label-format assumption)", async () => {
+    // chooseSidebarTarget's multi-doc disambiguation relies on VS Code deriving
+    // the built-in preview tab's label from the source file name. The pure unit
+    // tests hardcode that label ("Preview sample.md"); this locks the assumption
+    // against the REAL VS Code build so a future label-format change can't quietly
+    // break disambiguation. Found by tab scan (not active-tab), so it's not flaky.
+    const ext = vscode.extensions.getExtension(EXT_ID);
+    await ext.activate();
+
+    const doc = await openMarkdown("sample.md");
+    await vscode.commands.executeCommand("markdown.showPreview", doc.uri);
+
+    let label = null;
+    for (let i = 0; i < 25 && !label; i++) {
+      for (const group of vscode.window.tabGroups.all) {
+        for (const tab of group.tabs) {
+          const input = tab.input;
+          if (
+            input instanceof vscode.TabInputWebview &&
+            String(input.viewType).toLowerCase().includes("markdown.preview")
+          ) {
+            label = tab.label;
+          }
+        }
+      }
+      if (!label) {
+        await wait(150);
+      }
+    }
+
+    assert.ok(label, "the built-in Markdown preview tab should be open");
+    assert.ok(
+      label.toLowerCase().includes("sample.md"),
+      `preview tab label "${label}" should embed the source basename for disambiguation`
+    );
+  });
 });
 
 // Apply a core EditResult's text edits to a string (offsets from LSP positions,
