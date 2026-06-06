@@ -12,7 +12,7 @@ import {
   computeEdit
 } from "./preview/messageValidation";
 import { findThreadRange, parseRevealMessage, revealThread } from "./preview/revealThread";
-import { isSidebarVisible, setSidebarVisible } from "./preview/previewState";
+import { isSidebarVisible, setSidebarVisible, setPendingReveal, clearPendingReveal } from "./preview/previewState";
 import { clearIdentityCache } from "./model/identity";
 
 export function activate(context: vscode.ExtensionContext): {
@@ -28,6 +28,8 @@ export function activate(context: vscode.ExtensionContext): {
   revealThread: typeof revealThread;
   isSidebarVisible: typeof isSidebarVisible;
   setSidebarVisible: typeof setSidebarVisible;
+  setPendingReveal: typeof setPendingReveal;
+  clearPendingReveal: typeof clearPendingReveal;
   revealThreadInPanel: (uri: vscode.Uri, threadId: string) => boolean;
 } {
   const manager = new CommentManager();
@@ -88,6 +90,8 @@ export function activate(context: vscode.ExtensionContext): {
     revealThread,
     isSidebarVisible,
     setSidebarVisible,
+    setPendingReveal,
+    clearPendingReveal,
     revealThreadInPanel: (uri, threadId) => CommentsPreviewPanel.revealThread(uri, threadId)
   };
 }

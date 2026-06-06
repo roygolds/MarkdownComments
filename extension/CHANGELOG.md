@@ -39,13 +39,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Clicking a sidebar comment now reliably scrolls VS Code's built-in Markdown
-  preview to the anchored line. The reveal waits for the editor's visible range
-  to actually change and nudges the editor when the target is already at the top,
-  guaranteeing the visible-range event the preview's scroll-sync depends on
-  fires. When only the preview is open (no visible source editor), the source is
-  opened beside it — the only way VS Code lets an extension drive the built-in
-  preview — without taking keyboard focus away from the comments.
+- Clicking a sidebar comment now scrolls VS Code's built-in Markdown preview to
+  the commented line and briefly flashes it — without opening a raw editor.
+  Because VS Code exposes no API to scroll the built-in preview, the extension
+  drives it from inside: a click refreshes the preview so the markdown-it plugin
+  embeds an invisible scroll anchor next to the matching comment, and the
+  contributed preview script (`markdown.previewScripts`) scrolls that anchor into
+  view. When neither preview is open, the source Markdown still opens at the
+  anchored line.
 
 ### Security
 

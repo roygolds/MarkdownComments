@@ -170,3 +170,26 @@
 .mdc-pv-collapse .mdc-thread__body {
   display: none;
 }
+
+/* Zero-footprint scroll target injected next to a fence for sidebar reveal. */
+.mdc-reveal-anchor {
+  display: block;
+  height: 0;
+  margin: 0;
+  padding: 0;
+  scroll-margin-top: 8px;
+}
+
+/* Brief highlight on the revealed content after a sidebar click. */
+.mdc-reveal-flash {
+  animation: mdc-reveal-flash 1.2s ease-out;
+}
+
+@keyframes mdc-reveal-flash {
+  from {
+    background-color: var(--vscode-editor-findMatchHighlightBackground, rgba(255, 212, 0, 0.4));
+  }
+  to {
+    background-color: transparent;
+  }
+}

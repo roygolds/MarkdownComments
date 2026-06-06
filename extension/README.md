@@ -27,11 +27,11 @@ diff cleanly in Git.
   Markdown file you focus (including the interactive Comments Preview panel) and
   updates live as you edit. Click a comment to jump to it: if our interactive
   Comments Preview panel is open for that file, the panel scrolls to the thread
-  and briefly highlights it; if you're in VS Code's built-in Markdown preview,
-  the commented line is revealed via scroll-sync (the preview follows along
-  without yanking you to the raw text); otherwise the source Markdown opens at
-  the anchored line. While the sidebar is open, the built-in Markdown preview
-  hides its inline comment cards so comments appear in just one place.
+  and briefly highlights it; if VS Code's built-in Markdown preview is open, the
+  preview scrolls to the commented line and flashes it (no raw editor needed —
+  see below); otherwise the source Markdown opens at the anchored line. While the
+  sidebar is open, the built-in Markdown preview hides its inline comment cards so
+  comments appear in just one place.
 - **Hide & collapse controls**: hide all comments, collapse comment bodies, hide
   resolved threads, or collapse individual threads — in the panel, the sidebar,
   and the built-in Markdown preview.
@@ -60,15 +60,18 @@ a freshly built `dist/`. Then open a `.md` file in the new window.
 
 ### Built-in preview vs. Comments Preview panel
 
-Clicking a comment in the sidebar focuses it best in the **Comments Preview
-panel** (*MarkdownComments: Open Comments Preview*), which the extension fully
-controls — it scrolls to and highlights the thread. VS Code's **built-in**
-Markdown preview cannot be scrolled to a line by any extension API; the sidebar
-falls back to editor→preview scroll-sync, which only moves the built-in preview
-when a source editor for the file is visible and
-`markdown.preview.scrollPreviewWithEditor` is enabled (the default). With only
-the built-in preview open and no visible editor, the click opens the source
-editor beside the preview instead.
+VS Code exposes no API for an extension to scroll the **built-in** Markdown
+preview to a line. We work around this from inside the preview itself: the
+extension contributes a preview script (`markdown.previewScripts`), and when you
+click a sidebar comment it refreshes the preview so our markdown-it plugin embeds
+an invisible scroll anchor next to the matching comment; the preview script then
+scrolls that anchor into view and briefly flashes the line. This works even when
+only the preview is open — no source editor is opened.
+
+The fully-controllable alternative is the **Comments Preview panel**
+(*MarkdownComments: Open Comments Preview*), our own webview, which scrolls to and
+highlights the thread directly. When neither preview is open, clicking a comment
+opens the source Markdown at the anchored line.
 
 ### Versioning of builds
 

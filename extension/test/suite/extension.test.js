@@ -602,6 +602,42 @@ describe("MarkdownComments extension", () => {
     assert.ok(md.render(src).includes('data-thread-id="mc-001"'), "cards return when sidebar hidden again");
   });
 
+  it("emits a scroll anchor for the pending reveal target, even with cards hidden", async () => {
+    const ext = vscode.extensions.getExtension(EXT_ID);
+    const api = await ext.activate();
+    const MarkdownIt = require("markdown-it");
+    const md = new MarkdownIt();
+    api.extendMarkdownIt(md);
+    const src =
+      "```MarkdownComments\n- id: mc-001\n  comments:\n    - by: A\n      at: \"2026-06-05T08:03:51Z\"\n      text: hi\n```\nParagraph.\n";
+    try {
+      // No pending reveal: no anchor is emitted.
+      assert.ok(!md.render(src).includes("mdc-reveal-anchor"), "no anchor without a pending reveal");
+
+      // Pending reveal for this thread: an anchor carrying the nonce is emitted.
+      const nonce = api.setPendingReveal("mc-001");
+      const shown = md.render(src);
+      assert.ok(shown.includes("mdc-reveal-anchor"), "anchor emitted for the pending thread");
+      assert.ok(shown.includes(nonce), "anchor carries the reveal nonce");
+
+      // The anchor survives even when the sidebar hides the inline cards, so the
+      // built-in preview still has a target to scroll to.
+      api.setSidebarVisible(true);
+      const hidden = md.render(src);
+      assert.ok(!hidden.includes('data-thread-id="mc-001"'), "cards hidden while sidebar visible");
+      assert.ok(hidden.includes("mdc-reveal-anchor"), "scroll anchor kept even with cards hidden");
+      assert.ok(hidden.includes(nonce), "hidden-mode anchor still carries the nonce");
+
+      // A pending reveal for a different thread does not anchor this fence.
+      api.setPendingReveal("mc-999");
+      assert.ok(!md.render(src).includes("mdc-reveal-anchor"), "no anchor for a non-matching thread");
+    } finally {
+      api.setSidebarVisible(false);
+      api.clearPendingReveal();
+    }
+    assert.ok(!md.render(src).includes("mdc-reveal-anchor"), "anchor cleared after the reveal");
+  });
+
   it("interactive panel keeps comment cards even while the sidebar is visible", async () => {
     const ext = vscode.extensions.getExtension(EXT_ID);
     const api = await ext.activate();

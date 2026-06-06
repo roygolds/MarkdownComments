@@ -10,8 +10,8 @@
 import type MarkdownIt from "markdown-it";
 import { core } from "../core/wasmBridge";
 import type { ThreadView } from "../core/types";
-import { renderThreadsHtml } from "./cardRender";
-import { isSidebarVisible } from "./previewState";
+import { renderThreadsHtml, escapeHtml } from "./cardRender";
+import { isSidebarVisible, getPendingReveal } from "./previewState";
 
 const INFO = "MarkdownComments";
 
@@ -23,6 +23,23 @@ function parseFencePayload(payload: string): ThreadView[] {
   } catch {
     return [];
   }
+}
+
+/**
+ * Invisible anchor the preview script scrolls to. Emitted only for the fence that
+ * owns the thread the user just clicked in the sidebar, carrying the reveal nonce
+ * so media/preview.js can scroll once per click and ignore stale markers. Returns
+ * "" when there is no pending reveal for this fence.
+ */
+function revealAnchorHtml(threads: ThreadView[]): string {
+  const pending = getPendingReveal();
+  if (!pending || !threads.some((t) => t.id === pending.threadId)) {
+    return "";
+  }
+  return (
+    `<span class="mdc-reveal-anchor" data-mdc-reveal-nonce="${escapeHtml(pending.nonce)}"` +
+    ' aria-hidden="true"></span>'
+  );
 }
 
 interface PluginOptions {
@@ -38,14 +55,17 @@ export function applyMarkdownCommentsPlugin(md: MarkdownIt, options: PluginOptio
   md.renderer.rules.fence = (tokens, idx, opts, env, self) => {
     const token = tokens[idx];
     if (token.info.trim() === INFO) {
+      const threads = parseFencePayload(token.content);
+      // Keep a scroll target even when cards are hidden, so a sidebar click can
+      // still focus the commented line in the built-in preview.
+      const anchor = revealAnchorHtml(threads);
       // In the read-only built-in preview, suppress the inline comment cards
       // while the Word-style sidebar is visible so comments aren't duplicated.
       // The interactive panel (interactive: true) always keeps its cards.
       if (!options.interactive && isSidebarVisible()) {
-        return "";
+        return anchor;
       }
-      const threads = parseFencePayload(token.content);
-      return renderThreadsHtml(threads, token.content, options);
+      return anchor + renderThreadsHtml(threads, token.content, options);
     }
     return defaultFence(tokens, idx, opts, env, self);
   };

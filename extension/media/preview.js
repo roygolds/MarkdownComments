@@ -77,9 +77,38 @@
     }
   });
 
+  // Sidebar reveal bridge: a click in the comments sidebar stashes the target
+  // thread in the extension and refreshes this preview, which re-renders with an
+  // invisible `.mdc-reveal-anchor` carrying a fresh nonce next to the matching
+  // fence. Scroll it into view once per nonce (VS Code gives extensions no API to
+  // scroll the built-in preview, so we do it here from inside the preview DOM).
+  let lastRevealNonce = null;
+  function applyReveal() {
+    const anchor = document.querySelector(".mdc-reveal-anchor[data-mdc-reveal-nonce]");
+    if (!anchor) {
+      return;
+    }
+    const nonce = anchor.getAttribute("data-mdc-reveal-nonce");
+    if (!nonce || nonce === lastRevealNonce) {
+      return;
+    }
+    lastRevealNonce = nonce;
+    try {
+      anchor.scrollIntoView({ block: "start", behavior: "smooth" });
+    } catch (e) {
+      anchor.scrollIntoView();
+    }
+    const flash = anchor.nextElementSibling || anchor.parentElement;
+    if (flash) {
+      flash.classList.add("mdc-reveal-flash");
+      setTimeout(() => flash.classList.remove("mdc-reveal-flash"), 1200);
+    }
+  }
+
   function init() {
     buildToolbar();
     applyClasses();
+    applyReveal();
   }
 
   if (document.readyState === "loading") {
@@ -93,6 +122,7 @@
   const observer = new MutationObserver(() => {
     buildToolbar();
     applyClasses();
+    applyReveal();
   });
-  observer.observe(document.body, { childList: true });
+  observer.observe(document.body, { childList: true, subtree: true });
 })();

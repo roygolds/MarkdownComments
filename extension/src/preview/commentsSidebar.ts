@@ -14,7 +14,7 @@ import { randomBytes } from "crypto";
 import { selectSidebarBody } from "./documentCards";
 import { CommentEditController } from "./commentEditController";
 import { parseRevealMessage, revealThread } from "./revealThread";
-import { setSidebarVisible } from "./previewState";
+import { setSidebarVisible, setPendingReveal, clearPendingReveal } from "./previewState";
 import { onDidChangeActivePreview, CommentsPreviewPanel } from "./previewPanel";
 
 export class CommentsSidebarProvider implements vscode.WebviewViewProvider {
@@ -72,8 +72,22 @@ export class CommentsSidebarProvider implements vscode.WebviewViewProvider {
         // currently showing; a stale click from a previous target is ignored.
         if (this.targetUri && reveal.uri === this.targetUri.toString()) {
           // Prefer focusing the comment inside the interactive preview panel
-          // when it is open for this document; otherwise reveal the source line.
-          if (!CommentsPreviewPanel.revealThread(this.targetUri, reveal.threadId)) {
+          // when it is open for this document. Otherwise, if VS Code's built-in
+          // Markdown preview is open, drive it through our contributed preview
+          // script: stash the reveal target and refresh so the document re-renders
+          // with a scroll anchor that media/preview.js scrolls into view — no raw
+          // editor needed. As a last resort (no preview at all), reveal the source.
+          if (CommentsPreviewPanel.revealThread(this.targetUri, reveal.threadId)) {
+            // Routed to the interactive panel.
+          } else if (isBuiltInPreviewOpen()) {
+            setPendingReveal(reveal.threadId);
+            void refreshBuiltInPreview();
+            // The refresh re-renders and embeds the anchor within a beat; drop the
+            // pending target afterwards so an unrelated later refresh (e.g. a
+            // different file's preview) can't pick up a stale, possibly colliding
+            // thread id.
+            setTimeout(() => clearPendingReveal(), 2000);
+          } else {
             void revealThread(this.targetUri, reveal.threadId);
           }
         }
@@ -228,6 +242,29 @@ ${bodyHtml}
 }
 
 let refreshCommand: string | undefined;
+
+/**
+ * Whether any open tab is VS Code's built-in Markdown preview. Its webview tab
+ * has a viewType containing "markdown.preview" (e.g. "mainThreadWebview-markdown.preview");
+ * our own panel's viewType is "markdownCommentsPreview" (no dot) and is excluded.
+ * The match is content-scoped downstream: a refresh only injects a scroll anchor
+ * for the document that actually contains the target thread, so previews of other
+ * files are unaffected.
+ */
+function isBuiltInPreviewOpen(): boolean {
+  for (const group of vscode.window.tabGroups.all) {
+    for (const tab of group.tabs) {
+      const input = tab.input;
+      if (
+        input instanceof vscode.TabInputWebview &&
+        input.viewType.toLowerCase().includes("markdown.preview")
+      ) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
 
 /**
  * Re-render VS Code's built-in Markdown preview so its inline comment cards
