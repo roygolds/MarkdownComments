@@ -81,7 +81,11 @@ function toVsRange(r: CoreRange): vscode.Range {
 export function isBuiltInPreviewActive(): boolean {
   const tab = vscode.window.tabGroups.activeTabGroup.activeTab;
   const input = tab?.input;
-  if (input instanceof vscode.TabInputWebview) {
+  // The built-in Markdown preview surfaces either as a webview (viewType
+  // "mainThreadWebview-markdown.preview") or — in newer VS Code / when the
+  // "Markdown preview editor" is used — as a CUSTOM editor (viewType
+  // "vscode.markdown.preview.editor"). Both contain the "markdown.preview" token.
+  if (input instanceof vscode.TabInputWebview || input instanceof vscode.TabInputCustom) {
     return input.viewType.toLowerCase().includes("markdown.preview");
   }
   return false;
