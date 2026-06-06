@@ -4,7 +4,7 @@
   "description": "Microsoft Word / Google Docs style comments for Markdown files, stored inline and Git-friendly.",
   "icon": "media/markdowncomments.png",
   "version": "0.1.0",
-  "publisher": "markdowncomments",
+  "publisher": "roygolds",
   "license": "MIT",
   "repository": {
     "type": "git",
