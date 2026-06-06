@@ -3,6 +3,7 @@
 
 import * as vscode from "vscode";
 import { CommentManager, MarkdownComment } from "./comments/commentController";
+import { FenceFolding } from "./comments/fenceFolding";
 import { extendMarkdownIt, applyMarkdownCommentsPlugin } from "./preview/markdownItPlugin";
 import { CommentsPreviewPanel } from "./preview/previewPanel";
 import { CommentsSidebarProvider } from "./preview/commentsSidebar";import { renderDocumentComments, selectSidebarBody } from "./preview/documentCards";
@@ -40,6 +41,7 @@ export function activate(context: vscode.ExtensionContext): {
 } {
   const manager = new CommentManager();
   context.subscriptions.push(manager);
+  context.subscriptions.push(new FenceFolding());
 
   const register = (command: string, handler: (...args: any[]) => any) =>
     context.subscriptions.push(vscode.commands.registerCommand(command, handler));
