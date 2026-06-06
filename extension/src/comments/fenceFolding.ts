@@ -18,6 +18,40 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function isLineHidden(editor: vscode.TextEditor, line: number): boolean {
+  return !editor.visibleRanges.some((r) => line >= r.start.line && line <= r.end.line);
+}
+
+// True when the FIRST fence collapsed but a non-fence line just BELOW it stayed
+// visible — i.e. the enclosing heading region was NOT the thing that folded.
+function onlyFenceFolded(
+  editor: vscode.TextEditor,
+  spans: Array<{ startLine: number; endLine: number }>
+): boolean {
+  const first = spans[0];
+  if (!first) {
+    return true;
+  }
+  const inner = first.startLine + 1; // YAML line inside the fence
+  if (inner > first.endLine || !isLineHidden(editor, inner)) {
+    return false; // the fence itself didn't collapse
+  }
+  // Sentinel: a line that is hidden if the heading collapsed but visible if only
+  // the fence collapsed. Prefer the line just below the fence (inside the heading
+  // when a heading spans past the fence — the exact "everything collapsed" case).
+  const lineCount = editor.document.lineCount;
+  let sentinel = -1;
+  if (first.endLine + 1 < lineCount) {
+    sentinel = first.endLine + 1;
+  } else if (first.startLine - 1 >= 0) {
+    sentinel = first.startLine - 1;
+  }
+  if (sentinel >= 0 && isLineHidden(editor, sentinel)) {
+    return false; // a non-fence neighbour got folded => heading hijack
+  }
+  return true;
+}
+
 export class FenceFolding implements vscode.Disposable {
   private readonly disposables: vscode.Disposable[] = [];
   // Documents we have already issued an auto-fold for (once-per-document).
@@ -81,52 +115,95 @@ export class FenceFolding implements vscode.Disposable {
     void this.autoFold(document, key);
   }
 
-  // Readiness-aware auto-fold. The blocking issue on a cold start is that the
-  // editor's folding MODEL is not built immediately, so a blind `editor.fold`
-  // becomes a silent no-op. We poll the folding-range provider until ranges that
-  // cover our fences are actually available (the signal that `editor.fold` will
-  // work), then fold — preserving once-per-document and active-editor semantics.
+  // Readiness-aware, scope-verifying auto-fold. Two problems on a cold start:
+  //  1. The editor's folding MODEL is not built immediately, so a blind
+  //     `editor.fold` is a no-op until the provider's ranges are incorporated.
+  //  2. Even after `vscode.executeFoldingRangeProvider` returns our fence ranges,
+  //     the editor's LIVE fold model can still only know the built-in Markdown
+  //     HEADING region. In that window `editor.fold` collapses the whole heading
+  //     (everything → only the heading line visible) instead of just the fence.
+  // There is no public event for "live fold model updated", so we fold → verify
+  // (only the fence collapsed?) → unfold + retry until the model has the fence
+  // regions and the fold is correctly scoped.
   private async autoFold(document: vscode.TextDocument, key: string): Promise<void> {
-    const ATTEMPTS = 40;
-    const DELAY_MS = 150;
     try {
-      for (let attempt = 0; attempt < ATTEMPTS; attempt++) {
+      // 1. Wait until the provider produces fence ranges (necessary but NOT
+      //    sufficient — the live fold model lags behind).
+      const readySpans = await this.waitForProviderReady(document, key);
+      if (!readySpans) {
+        return;
+      }
+      // 2. Fold → verify → retry. The first attempts may hit the window where the
+      //    live model only knows the heading region and collapses everything; we
+      //    detect that (onlyFenceFolded === false), unfold, and retry until the
+      //    model has the fence regions and the fold is correct.
+      const MAX_ATTEMPTS = 14;
+      for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
         if (this.autoFolded.has(key)) {
           return;
         }
-        const lines = fenceFoldStartLines(this.spans(document));
+        const editor = vscode.window.activeTextEditor;
+        if (!editor || editor.document.uri.toString() !== key) {
+          return; // not active; refocus will reschedule (autoFolded not set)
+        }
+        const spans = this.spans(document);
+        const lines = fenceFoldStartLines(spans);
         if (lines.length === 0) {
           return;
         }
-        const ranges =
-          ((await vscode.commands.executeCommand(
-            "vscode.executeFoldingRangeProvider",
-            document.uri
-          )) as vscode.FoldingRange[] | undefined) || [];
-        const ready = ranges.some((r) => lines.includes(r.start));
-        if (!ready) {
-          await delay(DELAY_MS);
-          continue;
-        }
-        // Ranges are available: fold, but only if this document is still active
-        // (editor.fold targets the active editor). If it is not active, abort
-        // WITHOUT marking it folded so focusing it later re-triggers the fold.
-        if (vscode.window.activeTextEditor?.document.uri.toString() !== key) {
+        await vscode.commands.executeCommand("editor.unfoldAll");
+        await delay(120);
+        await vscode.commands.executeCommand("editor.fold", {
+          selectionLines: lines,
+          levels: 1,
+          direction: "down"
+        });
+        await delay(180);
+        if (onlyFenceFolded(editor, spans)) {
+          this.autoFolded.add(key);
           return;
         }
-        this.autoFolded.add(key);
-        await vscode.commands.executeCommand("editor.fold", { selectionLines: lines });
-        // Belt-and-suspenders against model lag: re-issue once more. Folding an
-        // already-folded region is a harmless no-op.
-        await delay(200);
-        if (vscode.window.activeTextEditor?.document.uri.toString() === key) {
-          await vscode.commands.executeCommand("editor.fold", { selectionLines: lines });
-        }
-        return;
+        await delay(150);
+      }
+      // Exhausted without a verified-correct fold: never leave the user staring at
+      // a fully collapsed document — unfold so the content is at least readable.
+      const editor = vscode.window.activeTextEditor;
+      if (editor && editor.document.uri.toString() === key) {
+        await vscode.commands.executeCommand("editor.unfoldAll");
       }
     } finally {
       this.pending.delete(key);
     }
+  }
+
+  // Poll the folding-range PROVIDER until it returns ranges covering our fences.
+  // Returns the spans when ready, or undefined if it never becomes ready / no fences.
+  private async waitForProviderReady(
+    document: vscode.TextDocument,
+    key: string
+  ): Promise<Array<{ startLine: number; endLine: number }> | undefined> {
+    const ATTEMPTS = 40;
+    const DELAY_MS = 150;
+    for (let i = 0; i < ATTEMPTS; i++) {
+      if (this.autoFolded.has(key)) {
+        return undefined;
+      }
+      const spans = this.spans(document);
+      const lines = fenceFoldStartLines(spans);
+      if (lines.length === 0) {
+        return undefined;
+      }
+      const ranges =
+        ((await vscode.commands.executeCommand(
+          "vscode.executeFoldingRangeProvider",
+          document.uri
+        )) as vscode.FoldingRange[] | undefined) || [];
+      if (ranges.some((r) => lines.includes(r.start))) {
+        return spans;
+      }
+      await delay(DELAY_MS);
+    }
+    return undefined;
   }
 
   dispose(): void {
