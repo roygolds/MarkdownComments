@@ -852,6 +852,11 @@ describe("MarkdownComments extension", () => {
       `preview tab label "${label}" should embed the source basename for disambiguation`
     );
   });
+
+  // NOTE: the prior counter-based blank-sidebar reproduction (which asserted on
+  // the providers internal render counters, not on any rendered webview) was
+  // replaced by suite/sidebarHtml.test.js, which resolves a REAL WebviewView and
+  // asserts on the actual rendered sidebar HTML across the user flow.
 });
 
 // Apply a core EditResult's text edits to a string (offsets from LSP positions,

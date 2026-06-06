@@ -30,6 +30,43 @@ export class CommentsSidebarProvider implements vscode.WebviewViewProvider {
   private readonly editController: CommentEditController;
   private readonly disposables: vscode.Disposable[] = [];
 
+  // Test-only observability. Records the marshaled vscode state and decision from
+  // the most recent recomputeTarget(), the ACTUAL sequence of render() calls (what
+  // each event-driven render would paint, regardless of whether the webview view
+  // resolved headlessly), and whether onDidCloseTextDocument has fired for the
+  // current target. The render log is the faithful seam for the blank-sidebar bug:
+  // the change-guard in setTarget() can suppress a needed re-render, leaving the
+  // last actually-painted body stale. Read only via __sidebarDebug().
+  private lastDecisionState: Record<string, unknown> | null = null;
+  private lastDecided: string | null = null;
+  private closedTargetUris: string[] = [];
+  private lastRenderHasComments: boolean | null = null;
+  private lastRenderTargetUri: string | null = null;
+  // Production render-state tracking (NOT test-only): what the most recent render()
+  // actually observed for the current target — whether findDocument() returned a
+  // document, and that document's version. setTarget() consults these to self-heal:
+  // when a recompute decides the SAME target uri but the target's loadability or
+  // version has changed since the last paint (e.g. the user returns to the built-in
+  // preview and the document is loadable again after having unloaded), the
+  // change-guard must NOT suppress the recovering render.
+  private lastRenderedDocFound: boolean | undefined;
+  private lastRenderedDocVersion: number | undefined;
+  private renderLog: Array<{
+    n: number;
+    targetUri: string | null;
+    docFound: boolean;
+    hasComments: boolean;
+    viewResolved: boolean;
+  }> = [];
+
+  // Test-only seam (no production effect): when set, findDocument() consults this
+  // resolver instead of vscode.workspace.textDocuments. The headless integration
+  // host pins every commented .md in workspace.textDocuments (CommentController
+  // never disposes its threads), so findDocument() can never observe the
+  // real-world "document unloaded" condition. Tests inject a resolver to model
+  // that condition deterministically and assert on the REAL render() HTML.
+  private docResolverOverride: (() => vscode.TextDocument | undefined) | undefined;
+
   constructor(private readonly extensionUri: vscode.Uri) {
     this.editController = new CommentEditController(
       () => this.targetUri,
@@ -49,11 +86,16 @@ export class CommentsSidebarProvider implements vscode.WebviewViewProvider {
           this.scheduleRender();
         }
       }),
-      vscode.workspace.onDidCloseTextDocument((doc) => {
-        if (this.targetUri && doc.uri.toString() === this.targetUri.toString()) {
-          this.render();
-        }
-      })
+      vscode.workspace.onDidCloseTextDocument((doc) => this.onDocClosed(doc.uri)),
+      // The built-in preview reloads the target .md ASYNCHRONOUSLY — often AFTER
+      // the tab-activation event already ran recomputeTarget() while the document
+      // was still unloaded (findDocument() undefined, so setTarget()'s self-heal
+      // saw no loadable doc and did not paint the cards). When the document finally
+      // opens, re-render so the now-loaded target paints its comment cards. Guarded
+      // to the current target only; NOT debounced (the user is waiting to see the
+      // cards reappear). render() is idempotent and does not re-enter recompute or
+      // emit document events, so this cannot loop.
+      vscode.workspace.onDidOpenTextDocument((doc) => this.onDocOpened(doc.uri))
     );
   }
 
@@ -179,25 +221,190 @@ export class CommentsSidebarProvider implements vscode.WebviewViewProvider {
       previewTabLabel,
       currentTargetUri: this.targetUri?.toString() ?? null
     });
+    this.lastDecisionState = {
+      activeMarkdownEditorUri,
+      panelSourceUri: CommentsPreviewPanel.activeSourceUri()?.toString() ?? null,
+      builtInPreviewActive,
+      openMarkdownUris,
+      previewTabLabel,
+      currentTargetUri: this.targetUri?.toString() ?? null
+    };
+    this.applyDecision(next);
+  }
+
+  /**
+   * Apply a recompute decision: record it and, when a target was decided, route
+   * it through setTarget() (which carries the change-guard). Extracted so the
+   * exact production tail of recomputeTarget() can be exercised directly.
+   */
+  private applyDecision(next: string | null): void {
+    this.lastDecided = next;
     if (next) {
       this.setTarget(vscode.Uri.parse(next));
     }
+  }
+
+  /**
+   * Exact body of the onDidCloseTextDocument handler. Extracted so a test can
+   * invoke the real close-handling path (which calls render()) without depending
+   * on the host actually unloading the pinned document.
+   */
+  private onDocClosed(uri: vscode.Uri): void {
+    if (this.targetUri && uri.toString() === this.targetUri.toString()) {
+      this.closedTargetUris.push(uri.toString());
+      this.render();
+    }
+  }
+
+  /**
+   * onDidOpenTextDocument handling. The built-in preview reloads the target .md
+   * asynchronously, frequently after the tab-activation recompute already ran with
+   * the document still unloaded — leaving setTarget()'s self-heal unable to repaint
+   * the cards. When the target document finally opens, render() once so the loaded
+   * document paints its comment cards. Guarded to the current target only; never
+   * renders for unrelated documents, and never debounced.
+   */
+  private onDocOpened(uri: vscode.Uri): void {
+    if (this.targetUri && uri.toString() === this.targetUri.toString()) {
+      this.render();
+    }
+  }
+
+  /**
+   * Test-only observability. Reports the ACTUAL last-painted render state (driven
+   * by real events — NOT forced here, so the change-guard's suppression is visible)
+   * plus current target/decision diagnostics. `forceRecompute` is opt-in for tests
+   * that specifically want to probe the pure decision against live state.
+   */
+  public __sidebarDebug(opts?: { forceRecompute?: boolean }): {
+    targetUri: string | null;
+    docInWorkspace: boolean;
+    lastRenderHasComments: boolean | null;
+    lastRenderTargetUri: string | null;
+    renderCount: number;
+    renderLog: Array<{
+      n: number;
+      targetUri: string | null;
+      docFound: boolean;
+      hasComments: boolean;
+      viewResolved: boolean;
+    }>;
+    decided: string | null;
+    state: Record<string, unknown> | null;
+    isBuiltInPreviewActive: boolean;
+    closedTargetFiredForTarget: boolean;
+    closedTargetUris: string[];
+  } {
+    if (opts?.forceRecompute) {
+      this.recomputeTarget();
+    }
+    const document = this.findDocument();
+    const targetUri = this.targetUri ? this.targetUri.toString() : null;
+    return {
+      targetUri,
+      docInWorkspace: !!document,
+      lastRenderHasComments: this.lastRenderHasComments,
+      lastRenderTargetUri: this.lastRenderTargetUri,
+      renderCount: this.renderLog.length,
+      renderLog: this.renderLog.slice(),
+      decided: this.lastDecided,
+      state: this.lastDecisionState,
+      isBuiltInPreviewActive: isBuiltInPreviewActive(),
+      closedTargetFiredForTarget:
+        !!targetUri && this.closedTargetUris.includes(targetUri),
+      closedTargetUris: this.closedTargetUris.slice()
+    };
   }
 
   private setTarget(uri: vscode.Uri): void {
     if (!this.targetUri || this.targetUri.toString() !== uri.toString()) {
       this.targetUri = uri;
       this.render();
+      return;
+    }
+    // Same target uri as before. The naive change-guard would skip render() here,
+    // but the target document's rendered state can change while its uri stays put:
+    // returning to the built-in preview reloads a document that had unloaded (the
+    // close handler painted the blank empty state), or the document version moved.
+    // Force a fresh render ONLY when the render-relevant state actually changed
+    // since the last paint, so the sidebar self-heals (re-paints the cards) without
+    // thrashing on unrelated events that re-decide the same, unchanged target.
+    if (this.renderStateChanged()) {
+      this.render();
     }
   }
 
+  /**
+   * Whether the render-relevant state for the current target differs from what the
+   * most recent render() actually painted: the target uri, whether findDocument()
+   * now returns a document (availability flipped undefined<->found), or the
+   * document's version. Used by setTarget()'s self-heal to re-render a same-uri
+   * target whose backing document has become (un)loadable since the last paint.
+   */
+  private renderStateChanged(): boolean {
+    const document = this.findDocument();
+    const docFound = !!document;
+    const docVersion = this.targetUri && document ? document.version : -1;
+    const targetUri = this.targetUri ? this.targetUri.toString() : null;
+    return (
+      this.lastRenderTargetUri !== targetUri ||
+      this.lastRenderedDocFound !== docFound ||
+      this.lastRenderedDocVersion !== docVersion
+    );
+  }
+
   private findDocument(): vscode.TextDocument | undefined {
+    if (this.docResolverOverride) {
+      return this.docResolverOverride();
+    }
     if (!this.targetUri) {
       return undefined;
     }
     return vscode.workspace.textDocuments.find(
       (d) => d.uri.toString() === this.targetUri!.toString()
     );
+  }
+
+  /**
+   * Test-only seam: install (or clear with `undefined`) a document resolver that
+   * findDocument() uses instead of vscode.workspace.textDocuments. Lets a test
+   * model the real-world "document loaded / unloaded" condition that the headless
+   * host cannot reproduce because it pins commented documents.
+   */
+  public __setDocumentResolverForTest(
+    resolver: (() => vscode.TextDocument | undefined) | undefined
+  ): void {
+    this.docResolverOverride = resolver;
+  }
+
+  /**
+   * Test-only seam: drive the exact decision-application tail of recomputeTarget()
+   * for a chosen target uri (or null for "no target"), routing it through the real
+   * setTarget() change-guard. Models the recompute that fires when the user returns
+   * to the built-in preview, without depending on flaky live editor/tab state.
+   */
+  public __applyDecisionForTest(decidedUri: string | null): void {
+    this.applyDecision(decidedUri);
+  }
+
+  /**
+   * Test-only seam: invoke the real onDidCloseTextDocument handling for `uri`,
+   * reproducing the step where the backing document unloads and the provider
+   * re-renders (painting the empty state when the document is no longer found).
+   */
+  public __simulateDocCloseForTest(uri: vscode.Uri): void {
+    this.onDocClosed(uri);
+  }
+
+  /**
+   * Test-only seam: invoke the real onDidOpenTextDocument handling for `uri`,
+   * reproducing the step where the built-in preview asynchronously reloads the
+   * target document and the provider re-renders (painting the comment cards once
+   * the document is loadable again). Mirrors __simulateDocCloseForTest so QA can
+   * cover the async-reload path deterministically.
+   */
+  public __simulateDocOpenForTest(uri: vscode.Uri): void {
+    this.onDocOpened(uri);
   }
 
   private scheduleRender(): void {
@@ -211,6 +418,28 @@ export class CommentsSidebarProvider implements vscode.WebviewViewProvider {
   }
 
   private render(): void {
+    // Test-only: faithfully record what THIS render() call would paint, computed
+    // exactly as below, BEFORE the view-resolution early-return. Headlessly the
+    // webview view never resolves, so this captured sequence is the only seam that
+    // reveals whether the change-guard left a stale (blank) body painted.
+    {
+      const doc = this.findDocument();
+      const body = selectSidebarBody(
+        Boolean(this.targetUri),
+        this.targetUri && doc ? doc.getText() : undefined
+      );
+      this.lastRenderHasComments = !body.includes("mdc-sidebar__empty");
+      this.lastRenderTargetUri = this.targetUri ? this.targetUri.toString() : null;
+      this.lastRenderedDocFound = !!doc;
+      this.lastRenderedDocVersion = this.targetUri && doc ? doc.version : -1;
+      this.renderLog.push({
+        n: this.renderLog.length,
+        targetUri: this.lastRenderTargetUri,
+        docFound: !!doc,
+        hasComments: this.lastRenderHasComments,
+        viewResolved: !!this.view
+      });
+    }
     if (!this.view) {
       return;
     }

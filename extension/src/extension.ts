@@ -33,6 +33,10 @@ export function activate(context: vscode.ExtensionContext): {
   clearPendingReveal: typeof clearPendingReveal;
   chooseSidebarTarget: typeof chooseSidebarTarget;
   revealThreadInPanel: (uri: vscode.Uri, threadId: string) => boolean;
+  __sidebarDebug: (opts?: { forceRecompute?: boolean }) => ReturnType<CommentsSidebarProvider["__sidebarDebug"]>;
+  // Test-only: the provider class itself, so a test can instantiate a REAL
+  // provider and resolve it against a fake WebviewView to assert on rendered HTML.
+  __SidebarProviderClass: typeof CommentsSidebarProvider;
 } {
   const manager = new CommentManager();
   context.subscriptions.push(manager);
@@ -95,7 +99,9 @@ export function activate(context: vscode.ExtensionContext): {
     setPendingReveal,
     clearPendingReveal,
     chooseSidebarTarget,
-    revealThreadInPanel: (uri, threadId) => CommentsPreviewPanel.revealThread(uri, threadId)
+    revealThreadInPanel: (uri, threadId) => CommentsPreviewPanel.revealThread(uri, threadId),
+    __sidebarDebug: (opts) => sidebarProvider.__sidebarDebug(opts),
+    __SidebarProviderClass: CommentsSidebarProvider
   };
 }
 
